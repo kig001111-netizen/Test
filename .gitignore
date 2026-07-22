@@ -1,9 +1,6 @@
 ## .NET / Visual Studio
 bin/
 obj/
-[Bb]uild/
-[Ll]og/
-[Ll]ogs/
 *.user
 *.userosscache
 *.suo
@@ -15,16 +12,15 @@ obj/
 *.rsuser
 *.sln.docstates
 
-## Build results
-[Dd]ebug/
-[Rr]elease/
+## Build results（出力フォルダのみ。Sql/Build は除外しない）
+**/[Dd]ebug/
+**/[Rr]elease/
+**/[Bb]in/
+**/[Oo]bj/
 x64/
 x86/
 [Aa][Rr][Mm]/
 [Aa][Rr][Mm]64/
-bld/
-[Bb]in/
-[Oo]bj/
 artifacts/
 
 ## NuGet
