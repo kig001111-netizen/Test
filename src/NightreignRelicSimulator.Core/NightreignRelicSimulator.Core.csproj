@@ -1,0 +1,10 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>NightreignRelicSimulator.Core</RootNamespace>
+    <AssemblyName>NightreignRelicSimulator.Core</AssemblyName>
+    <Description>ドメインモデル、enum、インターフェース、定数を定義するコア層</Description>
+  </PropertyGroup>
+
+</Project>

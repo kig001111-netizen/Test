@@ -1,0 +1,66 @@
+## .NET / Visual Studio
+bin/
+obj/
+[Bb]uild/
+[Ll]og/
+[Ll]ogs/
+*.user
+*.userosscache
+*.suo
+*.userprefs
+*.vspscc
+*.vssscc
+.vs/
+*.DotSettings.user
+*.rsuser
+*.sln.docstates
+
+## Build results
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+artifacts/
+
+## NuGet
+*.nupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+project.lock.json
+project.fragment.lock.json
+
+## SQLite（実行時生成・ローカルDB）
+*.db
+*.db-shm
+*.db-wal
+
+## OS / IDE
+Thumbs.db
+Desktop.ini
+.DS_Store
+*.swp
+*~
+.idea/
+
+## Test / coverage
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+*.coverage
+*.coveragexml
+coverage/
+
+## Publish
+publish/
+*.publishproj
+*.pubxml.user
+
+## Local / temp
+*.log
+docs/_*.tsv
+docs/_*.txt
+docs/_*.py

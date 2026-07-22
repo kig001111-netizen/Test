@@ -1,0 +1,12 @@
+<Project>
+  <PropertyGroup>
+    <!-- 全プロジェクト共通設定 -->
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- XMLコメント未記載の警告は開発初期は抑制（工程が進んだら有効化可能） -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+</Project>

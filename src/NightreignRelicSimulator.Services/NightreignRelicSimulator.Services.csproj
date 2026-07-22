@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>NightreignRelicSimulator.Services</RootNamespace>
+    <AssemblyName>NightreignRelicSimulator.Services</AssemblyName>
+    <Description>業務ロジックとダメージ計算を提供するサービス層</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NightreignRelicSimulator.Core\NightreignRelicSimulator.Core.csproj" />
+    <ProjectReference Include="..\NightreignRelicSimulator.Data\NightreignRelicSimulator.Data.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.11" />
+  </ItemGroup>
+
+</Project>
