@@ -1,112 +1,72 @@
+using NightreignRelicSimulator.App.Ui;
 using NightreignRelicSimulator.Core.Models;
 
 namespace NightreignRelicSimulator.App.Forms;
 
 /// <summary>
-/// 火力計算画面です。Build / Relic Service から Effect を集め、DamageCalculator に渡します。
+/// 火力計算画面です。最終火力 = 武器表示火力 × 全倍率。
 /// </summary>
-/// <remarks>
-/// 計算式: 最終火力 = 武器表示火力 × 全倍率（Excel の効果数値が倍率）。
-/// </remarks>
 public sealed class DamageCalculatorForm : Form
 {
-    private readonly NumericUpDown _weaponAttackBox = new()
-    {
-        Minimum = 0,
-        Maximum = 999999,
-        DecimalPlaces = 0,
-        Value = 1000,
-        Width = 120
-    };
-
-    private readonly ComboBox _buildBox = new()
-    {
-        Width = 320,
-        DropDownStyle = ComboBoxStyle.DropDownList
-    };
-
-    private readonly Label _baseAttackLabel = new() { AutoSize = true, Text = "武器表示火力: -" };
-    private readonly Label _totalMultiplierLabel = new() { AutoSize = true, Text = "総倍率: -" };
-    private readonly Label _finalAttackLabel = new() { AutoSize = true, Text = "最終火力: -" };
-    private readonly ListBox _appliedList = new() { Dock = DockStyle.Fill };
-    private readonly ListBox _ignoredList = new() { Dock = DockStyle.Fill };
-    private readonly TextBox _logBox = new()
-    {
-        Dock = DockStyle.Fill,
-        Multiline = true,
-        ReadOnly = true,
-        ScrollBars = ScrollBars.Vertical
-    };
+    private readonly NumericUpDown _weaponAttackBox = UiFactory.CreateNumeric(0, 999999);
+    private readonly ComboBox _buildBox = UiFactory.CreateComboBox(320);
+    private readonly Label _baseAttackLabel = new();
+    private readonly Label _totalMultiplierLabel = new();
+    private readonly Label _finalAttackLabel = new();
+    private readonly Label _effectCountLabel = UiFactory.CreateMutedLabel("適用 0 / 無効 0");
+    private readonly ListBox _appliedList = new();
+    private readonly ListBox _ignoredList = new();
+    private readonly TextBox _logBox = new();
 
     private List<Build> _builds = [];
 
     public DamageCalculatorForm()
     {
         Text = "火力計算";
-        StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(900, 640);
-        MinimizeBox = false;
+        UiFactory.ApplyFormChrome(this);
 
         _weaponAttackBox.Value = ClampAttack(UiSessionState.WeaponAttack);
         _weaponAttackBox.ValueChanged += (_, _) => UiSessionState.WeaponAttack = _weaponAttackBox.Value;
 
-        var top = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Top,
-            Height = 48,
-            Padding = new Padding(8),
-            WrapContents = false
-        };
+        var toolbar = UiFactory.CreateToolbar();
+        toolbar.Height = 56;
+        toolbar.Controls.Add(UiFactory.CreateMutedLabel("武器表示火力"));
+        toolbar.Controls.Add(_weaponAttackBox);
+        toolbar.Controls.Add(UiFactory.CreateMutedLabel("ビルド"));
+        toolbar.Controls.Add(_buildBox);
+        toolbar.Controls.Add(UiFactory.CreateAsyncButton("計算", CalculateAsync, this, 100, primary: true));
+        toolbar.Controls.Add(UiFactory.CreateAsyncButton("ビルド再読込", LoadBuildsAsync, this, 120));
 
-        var calcButton = new Button { Text = "計算", Width = 100, Height = 28 };
-        calcButton.Click += async (_, _) => await UiHelper.RunAsync(CalculateAsync, this);
-        var reloadButton = new Button { Text = "ビルド再読込", Width = 120, Height = 28 };
-        reloadButton.Click += async (_, _) => await UiHelper.RunAsync(LoadBuildsAsync, this);
-
-        top.Controls.Add(new Label { Text = "武器表示火力", AutoSize = true, Padding = new Padding(0, 6, 0, 0) });
-        top.Controls.Add(_weaponAttackBox);
-        top.Controls.Add(new Label { Text = "ビルド", AutoSize = true, Padding = new Padding(12, 6, 0, 0) });
-        top.Controls.Add(_buildBox);
-        top.Controls.Add(calcButton);
-        top.Controls.Add(reloadButton);
-
-        var summary = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Top,
-            Height = 70,
-            Padding = new Padding(8),
-            FlowDirection = FlowDirection.TopDown
-        };
-        summary.Controls.Add(_baseAttackLabel);
-        summary.Controls.Add(_totalMultiplierLabel);
-        summary.Controls.Add(_finalAttackLabel);
+        var summary = BuildSummaryPanel();
 
         var split = new SplitContainer
         {
             Dock = DockStyle.Fill,
             Orientation = Orientation.Horizontal,
-            SplitterDistance = 280
+            SplitterDistance = 280,
+            BackColor = UiTheme.Border
         };
 
         var lists = new SplitContainer
         {
             Dock = DockStyle.Fill,
             Orientation = Orientation.Vertical,
-            SplitterDistance = 440
+            SplitterDistance = 480,
+            BackColor = UiTheme.Border
         };
+        lists.Panel1.Controls.Add(CreateListPanel("適用された Effect", _appliedList));
+        lists.Panel2.Controls.Add(CreateListPanel("適用されなかった Effect", _ignoredList));
 
-        var appliedPanel = CreateLabeledPanel("適用されたEffect", _appliedList);
-        var ignoredPanel = CreateLabeledPanel("適用されなかったEffect", _ignoredList);
-        lists.Panel1.Controls.Add(appliedPanel);
-        lists.Panel2.Controls.Add(ignoredPanel);
+        StyleListBox(_appliedList);
+        StyleListBox(_ignoredList);
+        StyleLogBox(_logBox);
 
-        var logPanel = CreateLabeledPanel("計算ログ", _logBox);
         split.Panel1.Controls.Add(lists);
-        split.Panel2.Controls.Add(logPanel);
+        split.Panel2.Controls.Add(CreateListPanel("計算ログ", _logBox));
 
         Controls.Add(split);
         Controls.Add(summary);
-        Controls.Add(top);
+        Controls.Add(toolbar);
 
         Shown += async (_, _) => await UiHelper.RunAsync(LoadBuildsAsync, this);
         FormClosing += (_, _) =>
@@ -119,20 +79,91 @@ public sealed class DamageCalculatorForm : Form
         };
     }
 
-    private static Panel CreateLabeledPanel(string title, Control content)
+    private Panel BuildSummaryPanel()
     {
-        var panel = new Panel { Dock = DockStyle.Fill, Padding = new Padding(8) };
-        var label = new Label
+        var panel = new Panel
         {
-            Text = title,
             Dock = DockStyle.Top,
-            Height = 24,
-            Font = new Font("Segoe UI", 9F, FontStyle.Bold)
+            Height = 120,
+            BackColor = UiTheme.Surface,
+            Padding = new Padding(20, 16, 20, 12)
         };
+
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 3,
+            RowCount = 2
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 34));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        layout.Controls.Add(UiFactory.CreateMutedLabel("武器表示火力"), 0, 0);
+        layout.Controls.Add(UiFactory.CreateMutedLabel("総倍率"), 1, 0);
+        layout.Controls.Add(UiFactory.CreateMutedLabel("最終火力"), 2, 0);
+
+        StyleResultLabel(_baseAttackLabel, "-");
+        StyleResultLabel(_totalMultiplierLabel, "-");
+        StyleResultLabel(_finalAttackLabel, "-");
+        _finalAttackLabel.ForeColor = UiTheme.Accent;
+
+        layout.Controls.Add(_baseAttackLabel, 0, 1);
+        layout.Controls.Add(_totalMultiplierLabel, 1, 1);
+        layout.Controls.Add(_finalAttackLabel, 2, 1);
+
+        _effectCountLabel.Dock = DockStyle.Bottom;
+        panel.Controls.Add(layout);
+        panel.Controls.Add(_effectCountLabel);
+        return panel;
+    }
+
+    private static void StyleResultLabel(Label label, string text)
+    {
+        label.Text = text;
+        label.Dock = DockStyle.Fill;
+        label.Font = UiTheme.ResultFont;
+        label.ForeColor = UiTheme.TextPrimary;
+        label.TextAlign = ContentAlignment.MiddleLeft;
+    }
+
+    private static Panel CreateListPanel(string title, Control content)
+    {
+        var panel = new Panel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = UiTheme.Surface,
+            Padding = new Padding(12)
+        };
+        var label = UiFactory.CreateHeading(title);
+        label.Dock = DockStyle.Top;
+        label.Height = 28;
         content.Dock = DockStyle.Fill;
         panel.Controls.Add(content);
         panel.Controls.Add(label);
         return panel;
+    }
+
+    private static void StyleListBox(ListBox list)
+    {
+        list.BackColor = UiTheme.SurfaceAlt;
+        list.ForeColor = UiTheme.TextPrimary;
+        list.BorderStyle = BorderStyle.None;
+        list.Font = UiTheme.BodyFont;
+        list.IntegralHeight = false;
+    }
+
+    private static void StyleLogBox(TextBox box)
+    {
+        box.Multiline = true;
+        box.ReadOnly = true;
+        box.ScrollBars = ScrollBars.Vertical;
+        box.BackColor = UiTheme.SurfaceAlt;
+        box.ForeColor = UiTheme.TextPrimary;
+        box.BorderStyle = BorderStyle.None;
+        box.Font = UiTheme.MonoFont;
     }
 
     private async Task LoadBuildsAsync()
@@ -156,7 +187,7 @@ public sealed class DamageCalculatorForm : Form
     {
         if (_buildBox.SelectedValue is not int buildId)
         {
-            MessageBox.Show(this, "ビルドを選択してください。", Text);
+            UiHelper.ShowInfo(this, "ビルドを選択してください。");
             return;
         }
 
@@ -166,7 +197,7 @@ public sealed class DamageCalculatorForm : Form
         var detail = await AppServices.Builds.LoadAsync(buildId).ConfigureAwait(true);
         if (detail is null)
         {
-            MessageBox.Show(this, "ビルドが見つかりません。", Text);
+            UiHelper.ShowInfo(this, "ビルドが見つかりません。");
             return;
         }
 
@@ -191,22 +222,24 @@ public sealed class DamageCalculatorForm : Form
             Effects = effects
         });
 
-        _baseAttackLabel.Text = $"武器表示火力: {result.BaseAttack:0.####}";
-        _totalMultiplierLabel.Text = $"総倍率: {result.TotalMultiplier:0.########}";
-        _finalAttackLabel.Text = $"最終火力: {result.FinalAttack:0.####}";
+        _baseAttackLabel.Text = $"{result.BaseAttack:0.####}";
+        _totalMultiplierLabel.Text = $"× {result.TotalMultiplier:0.########}";
+        _finalAttackLabel.Text = $"{result.FinalAttack:0.####}";
+        _effectCountLabel.Text =
+            $"入力効果 {effects.Count}  /  適用 {result.AppliedEffects.Count}  /  無効 {result.IgnoredEffects.Count}";
 
         _appliedList.DataSource = result.AppliedEffects
-            .Select(e => $"EffectId={e.EffectId} Lv{e.Level} {e.Name} x{e.Value}")
+            .Select(e => $"[{e.Category}] EffectId={e.EffectId} Lv{e.Level}  {e.Name}  ×{e.Value}")
             .ToList();
         _ignoredList.DataSource = result.IgnoredEffects
-            .Select(e => $"EffectId={e.EffectId} Lv{e.Level} {e.Name} x{e.Value}")
+            .Select(e => $"[{e.Category}] EffectId={e.EffectId} Lv{e.Level}  {e.Name}  ×{e.Value}")
             .ToList();
         _logBox.Text = string.Join(
             Environment.NewLine,
             result.Logs.Select(l =>
                 $"[{l.Step}] {l.Description}" +
-                (l.Multiplier is null ? string.Empty : $" (x{l.Multiplier})") +
-                $" → {l.CurrentAttack:0.####}"));
+                (l.Multiplier is null ? string.Empty : $"  (×{l.Multiplier})") +
+                $"  → {l.CurrentAttack:0.####}"));
     }
 
     private static decimal ClampAttack(decimal value)

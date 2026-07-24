@@ -1,3 +1,4 @@
+using NightreignRelicSimulator.App.Ui;
 using NightreignRelicSimulator.Core.Models;
 
 namespace NightreignRelicSimulator.App.Forms;
@@ -8,12 +9,9 @@ namespace NightreignRelicSimulator.App.Forms;
 public sealed class EffectManageForm : Form
 {
     private readonly DataGridView _grid = new();
-    private readonly TextBox _searchBox = new();
-    private readonly ComboBox _categoryBox = new()
-    {
-        Width = 160,
-        DropDownStyle = ComboBoxStyle.DropDownList
-    };
+    private readonly TextBox _searchBox = UiFactory.CreateTextBox(240);
+    private readonly ComboBox _categoryBox = UiFactory.CreateComboBox(140);
+    private readonly Label _countLabel = UiFactory.CreateMutedLabel("0 件");
 
     private List<Effect> _allItems = [];
     private List<Effect> _items = [];
@@ -21,19 +19,9 @@ public sealed class EffectManageForm : Form
     public EffectManageForm()
     {
         Text = "Effect管理";
-        StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(960, 560);
-        MinimizeBox = false;
+        UiFactory.ApplyFormChrome(this);
 
-        var top = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Top,
-            Height = 44,
-            Padding = new Padding(8),
-            WrapContents = false
-        };
-
-        _searchBox.Width = 220;
+        var toolbar = UiFactory.CreateToolbar();
         _searchBox.PlaceholderText = "名称検索";
         _searchBox.KeyDown += (_, e) =>
         {
@@ -44,16 +32,28 @@ public sealed class EffectManageForm : Form
             }
         };
 
-        var btnSearch = CreateButton("検索", ApplyFilterAsync);
-        var btnReload = CreateButton("再読込", LoadAsync);
-        var btnAdd = CreateButton("追加", () => EditAsync(isNew: true));
-        var btnEdit = CreateButton("編集", () => EditAsync(isNew: false));
-        var btnDelete = CreateButton("削除", DeleteAsync);
+        toolbar.Controls.Add(UiFactory.CreateMutedLabel("カテゴリ"));
+        toolbar.Controls.Add(_categoryBox);
+        toolbar.Controls.Add(_searchBox);
+        toolbar.Controls.Add(UiFactory.CreateAsyncButton("検索", ApplyFilterAsync, this));
+        toolbar.Controls.Add(UiFactory.CreateAsyncButton("再読込", LoadAsync, this));
+        toolbar.Controls.Add(UiFactory.CreateAsyncButton("追加", () => EditAsync(isNew: true), this, primary: true));
+        toolbar.Controls.Add(UiFactory.CreateAsyncButton("編集", () => EditAsync(isNew: false), this));
+        toolbar.Controls.Add(UiFactory.CreateAsyncButton("削除", DeleteAsync, this));
 
-        top.Controls.Add(new Label { Text = "カテゴリ", AutoSize = true, Padding = new Padding(0, 6, 0, 0) });
-        top.Controls.Add(_categoryBox);
-        top.Controls.Add(_searchBox);
-        top.Controls.AddRange([btnSearch, btnReload, btnAdd, btnEdit, btnDelete]);
+        var footer = new Panel
+        {
+            Dock = DockStyle.Bottom,
+            Height = 36,
+            Padding = new Padding(16, 8, 16, 8),
+            BackColor = UiTheme.SurfaceAlt
+        };
+        _countLabel.Dock = DockStyle.Left;
+        footer.Controls.Add(_countLabel);
+
+        UiFactory.ConfigureGrid(_grid);
+        _grid.Dock = DockStyle.Fill;
+        _grid.CellDoubleClick += async (_, _) => await UiHelper.RunAsync(() => EditAsync(isNew: false), this);
 
         _categoryBox.SelectedIndexChanged += (_, _) =>
         {
@@ -63,32 +63,11 @@ public sealed class EffectManageForm : Form
             }
         };
 
-        ConfigureGrid(_grid);
-        _grid.Dock = DockStyle.Fill;
-        _grid.CellDoubleClick += async (_, _) => await UiHelper.RunAsync(() => EditAsync(isNew: false), this);
-
         Controls.Add(_grid);
-        Controls.Add(top);
+        Controls.Add(footer);
+        Controls.Add(toolbar);
 
         Shown += async (_, _) => await UiHelper.RunAsync(LoadAsync, this);
-    }
-
-    private Button CreateButton(string text, Func<Task> action)
-    {
-        var button = new Button { Text = text, Width = 80, Height = 28 };
-        button.Click += async (_, _) => await UiHelper.RunAsync(action, this);
-        return button;
-    }
-
-    private static void ConfigureGrid(DataGridView grid)
-    {
-        grid.ReadOnly = true;
-        grid.AllowUserToAddRows = false;
-        grid.AllowUserToDeleteRows = false;
-        grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        grid.MultiSelect = false;
-        grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-        grid.RowHeadersVisible = false;
     }
 
     private async Task LoadAsync()
@@ -149,6 +128,7 @@ public sealed class EffectManageForm : Form
     {
         _grid.DataSource = null;
         _grid.DataSource = items.Select(e => new EffectRow(e)).ToList();
+        _countLabel.Text = $"{items.Count} 件表示 / 全 {_allItems.Count} 件";
     }
 
     private Effect? GetSelectedEffect()
@@ -183,7 +163,7 @@ public sealed class EffectManageForm : Form
             var selected = GetSelectedEffect();
             if (selected is null)
             {
-                MessageBox.Show(this, "編集する行を選択してください。", Text);
+                UiHelper.ShowInfo(this, "編集する行を選択してください。");
                 return;
             }
 
@@ -192,7 +172,7 @@ public sealed class EffectManageForm : Form
         }
 
         using var dialog = new EffectEditDialog(editing, isNew);
-        if (dialog.ShowDialog(this) != DialogResult.OK)
+        if (dialog.ShowDialog(FindForm()) != DialogResult.OK)
         {
             return;
         }
@@ -214,16 +194,11 @@ public sealed class EffectManageForm : Form
         var selected = GetSelectedEffect();
         if (selected is null)
         {
-            MessageBox.Show(this, "削除する行を選択してください。", Text);
+            UiHelper.ShowInfo(this, "削除する行を選択してください。");
             return;
         }
 
-        if (MessageBox.Show(
-                this,
-                $"EffectId={selected.EffectId} / {selected.Name} を削除しますか？",
-                Text,
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Question) != DialogResult.Yes)
+        if (!UiHelper.Confirm(this, $"EffectId={selected.EffectId} / {selected.Name} を削除しますか？"))
         {
             return;
         }
@@ -262,14 +237,22 @@ public sealed class EffectManageForm : Form
 /// </summary>
 internal sealed class EffectEditDialog : Form
 {
-    private readonly NumericUpDown _effectId = CreateIntegerInput();
-    private readonly TextBox _name = new() { Width = 280 };
-    private readonly TextBox _category = new() { Width = 280 };
-    private readonly CheckBox _canStack = new() { Text = "CanStack（重複可）", AutoSize = true };
-    private readonly NumericUpDown _value = CreateDecimalInput();
-    private readonly NumericUpDown _level = CreateIntegerInput(min: 1, max: 99);
-    private readonly TextBox _description = new() { Width = 280, Height = 60, Multiline = true };
-    private readonly NumericUpDown _displayOrder = CreateIntegerInput(min: 0, max: 99999);
+    private readonly NumericUpDown _effectId = UiFactory.CreateNumeric(0, 999999);
+    private readonly TextBox _name = UiFactory.CreateTextBox(280);
+    private readonly TextBox _category = UiFactory.CreateTextBox(280);
+    private readonly CheckBox _canStack = new() { Text = "CanStack（重複可）", AutoSize = true, ForeColor = UiTheme.TextPrimary };
+    private readonly NumericUpDown _value = UiFactory.CreateNumeric(0.01m, 100m, decimalPlaces: 4);
+    private readonly NumericUpDown _level = UiFactory.CreateNumeric(1, 99);
+    private readonly TextBox _description = new()
+    {
+        Width = 280,
+        Height = 60,
+        Multiline = true,
+        BackColor = UiTheme.SurfaceAlt,
+        ForeColor = UiTheme.TextPrimary,
+        BorderStyle = BorderStyle.FixedSingle
+    };
+    private readonly NumericUpDown _displayOrder = UiFactory.CreateNumeric(0, 99999);
 
     public Effect Effect { get; private set; }
 
@@ -281,12 +264,14 @@ internal sealed class EffectEditDialog : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
-        ClientSize = new Size(420, 360);
+        ClientSize = new Size(440, 400);
+        UiFactory.ApplyFormChrome(this);
 
         _effectId.Value = Math.Max(0, source.EffectId);
         _name.Text = source.Name;
         _category.Text = source.Category;
         _canStack.Checked = source.CanStack;
+        _value.Increment = 0.01m;
         _value.Value = ClampDecimal(source.Value);
         _level.Value = Math.Max(1, source.Level);
         _description.Text = source.Description;
@@ -297,9 +282,10 @@ internal sealed class EffectEditDialog : Form
             Dock = DockStyle.Fill,
             ColumnCount = 2,
             RowCount = 9,
-            Padding = new Padding(12)
+            Padding = new Padding(16),
+            BackColor = UiTheme.Surface
         };
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
         AddRow(layout, 0, "EffectId", _effectId);
@@ -315,16 +301,18 @@ internal sealed class EffectEditDialog : Form
         {
             Dock = DockStyle.Bottom,
             FlowDirection = FlowDirection.RightToLeft,
-            Height = 44,
-            Padding = new Padding(8)
+            Height = 52,
+            Padding = new Padding(12),
+            BackColor = UiTheme.SurfaceAlt
         };
-        var ok = new Button { Text = "OK", DialogResult = DialogResult.None, Width = 90 };
-        var cancel = new Button { Text = "キャンセル", DialogResult = DialogResult.Cancel, Width = 90 };
+        var ok = UiFactory.CreateButton("OK", 100, primary: true);
+        var cancel = UiFactory.CreateButton("キャンセル", 100);
+        cancel.DialogResult = DialogResult.Cancel;
         ok.Click += (_, _) =>
         {
             if (string.IsNullOrWhiteSpace(_name.Text))
             {
-                MessageBox.Show(this, "Name は必須です。", Text);
+                UiHelper.ShowInfo(this, "Name は必須です。");
                 return;
             }
 
@@ -354,31 +342,14 @@ internal sealed class EffectEditDialog : Form
 
     private static void AddRow(TableLayoutPanel layout, int row, string label, Control control)
     {
-        layout.Controls.Add(new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left }, 0, row);
+        layout.Controls.Add(new Label
+        {
+            Text = label,
+            AutoSize = true,
+            ForeColor = UiTheme.TextMuted,
+            Anchor = AnchorStyles.Left
+        }, 0, row);
         layout.Controls.Add(control, 1, row);
-    }
-
-    private static NumericUpDown CreateIntegerInput(int min = 0, int max = 999999)
-    {
-        return new NumericUpDown
-        {
-            Minimum = min,
-            Maximum = max,
-            Width = 120,
-            DecimalPlaces = 0
-        };
-    }
-
-    private static NumericUpDown CreateDecimalInput()
-    {
-        return new NumericUpDown
-        {
-            Minimum = 0.01m,
-            Maximum = 100m,
-            DecimalPlaces = 4,
-            Increment = 0.01m,
-            Width = 120
-        };
     }
 
     private static decimal ClampDecimal(decimal value)

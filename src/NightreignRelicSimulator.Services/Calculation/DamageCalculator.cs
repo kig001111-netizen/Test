@@ -49,11 +49,20 @@ public sealed class DamageCalculator
         var logs = new List<CalculationLog>();
         var step = 0;
 
-        // ① Effect 一覧（入力済み）
-        logs.Add(CreateLog(++step, $"効果入力件数={request.Effects.Count}", null, request.WeaponAttack));
+        // ① Effect 一覧（入力済み）+ 段階 Level 解決
+        var effects = request.Effects;
+        if (request.EffectCatalog is { Count: > 0 })
+        {
+            effects = StagedEffectResolver.ApplyLevelOverrides(
+                request.Effects,
+                request.EffectCatalog,
+                request.LevelOverrides);
+        }
+
+        logs.Add(CreateLog(++step, $"効果入力件数={effects.Count}", null, request.WeaponAttack));
 
         // ② DuplicateChecker
-        var duplicateResult = _duplicateChecker.Check(request.Effects);
+        var duplicateResult = _duplicateChecker.Check(effects);
         logs.Add(CreateLog(
             ++step,
             $"重複判定: 採用={duplicateResult.AppliedEffects.Count}, 無効={duplicateResult.IgnoredEffects.Count}",

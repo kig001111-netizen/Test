@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#121214" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>Nightreign Relic Simulator</title>
+  <link rel="stylesheet" href="./css/app.css" />
+</head>
+<body>
+  <div class="app" id="appRoot" hidden>
+    <aside class="nav">
+      <div class="brand">
+        <div class="brand-title">NIGHTREIGN</div>
+        <div class="brand-sub">Relic Simulator (Web)</div>
+      </div>
+      <nav class="nav-buttons">
+        <button type="button" class="nav-btn active" data-view="calc">火力計算</button>
+        <button type="button" class="nav-btn" data-view="build">ビルド管理</button>
+        <button type="button" class="nav-btn" data-view="relic">遺物管理</button>
+        <button type="button" class="nav-btn" data-view="effect">Effect管理</button>
+      </nav>
+      <div class="nav-footer" id="sessionInfo">火力 —</div>
+    </aside>
+
+    <main class="main">
+      <header class="header">
+        <h1 id="viewTitle">火力計算</h1>
+      </header>
+
+      <section id="view-calc" class="view active">
+        <div class="toolbar">
+          <label>武器表示火力 <input id="calcAttack" type="number" min="0" inputmode="numeric" value="1000" /></label>
+          <label>ビルド
+            <select id="calcBuild"></select>
+          </label>
+          <button type="button" class="btn primary" id="btnCalculate">計算</button>
+          <button type="button" class="btn" id="btnReloadBuildsCalc">再読込</button>
+        </div>
+        <div class="panel" id="stagedPanel" hidden>
+          <h2>段階効果レベル</h2>
+          <p class="muted">封牢・夜の侵入などは遺物では1効果として扱い、ここでレベルを変更します。</p>
+          <div id="stagedControls" class="staged-controls"></div>
+        </div>
+        <div class="summary">
+          <div><span class="muted">武器表示火力</span><div class="result" id="resBase">-</div></div>
+          <div><span class="muted">総倍率</span><div class="result" id="resMult">-</div></div>
+          <div><span class="muted">最終火力</span><div class="result accent" id="resFinal">-</div></div>
+        </div>
+        <p class="muted" id="resCount"></p>
+        <div class="split">
+          <div class="panel">
+            <h2>適用された Effect</h2>
+            <ul id="appliedList"></ul>
+          </div>
+          <div class="panel">
+            <h2>適用されなかった Effect</h2>
+            <ul id="ignoredList"></ul>
+          </div>
+        </div>
+        <div class="panel">
+          <h2>計算ログ</h2>
+          <pre id="calcLog"></pre>
+        </div>
+      </section>
+
+      <section id="view-build" class="view">
+        <div class="split">
+          <div class="panel">
+            <div class="toolbar">
+              <input id="buildSearch" placeholder="ビルド名検索" />
+              <button type="button" class="btn" id="btnBuildSearch">検索</button>
+              <button type="button" class="btn" id="btnBuildReload">再読込</button>
+            </div>
+            <table>
+              <thead><tr><th>Id</th><th>名前</th><th>キャラ</th><th>武器</th></tr></thead>
+              <tbody id="buildTable"></tbody>
+            </table>
+          </div>
+          <div class="panel">
+            <h2 id="buildEditorTitle">新規保存</h2>
+            <form id="buildForm" class="form">
+              <input type="hidden" id="buildId" />
+              <label>ビルド名 <input id="buildName" required /></label>
+              <label>キャラ名 <input id="buildCharacter" /></label>
+              <label>武器名 <input id="buildWeapon" /></label>
+              <label>武器表示火力 <input id="buildAttack" type="number" min="0" value="1000" /></label>
+              <div id="buildRelicSlots"></div>
+              <div class="actions">
+                <button type="button" class="btn" id="btnBuildClear">新規クリア</button>
+                <button type="submit" class="btn primary">保存</button>
+                <button type="button" class="btn danger" id="btnBuildDelete">削除</button>
+                <button type="button" class="btn primary" id="btnBuildToCalc">火力計算へ</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <section id="view-relic" class="view">
+        <div class="split">
+          <div class="panel">
+            <div class="toolbar">
+              <select id="relicColorFilter">
+                <option value="">(すべて)</option>
+                <option value="0">None</option>
+                <option value="1">Red</option>
+                <option value="2">Blue</option>
+                <option value="3">Yellow</option>
+                <option value="4">Green</option>
+                <option value="5">Purple</option>
+              </select>
+              <input id="relicSearch" placeholder="名前検索" />
+              <button type="button" class="btn" id="btnRelicSearch">検索</button>
+              <button type="button" class="btn" id="btnRelicReload">再読込</button>
+            </div>
+            <table>
+              <thead><tr><th>Id</th><th>名前</th><th>色</th></tr></thead>
+              <tbody id="relicTable"></tbody>
+            </table>
+          </div>
+          <div class="panel">
+            <h2 id="relicEditorTitle">新規登録</h2>
+            <form id="relicForm" class="form">
+              <input type="hidden" id="relicId" />
+              <label>名前 <input id="relicName" required /></label>
+              <label>色
+                <select id="relicColor">
+                  <option value="0">None</option>
+                  <option value="1">Red</option>
+                  <option value="2">Blue</option>
+                  <option value="3">Yellow</option>
+                  <option value="4">Green</option>
+                  <option value="5">Purple</option>
+                </select>
+              </label>
+              <label>メモ <input id="relicMemo" /></label>
+              <div id="relicEffectSlots"></div>
+              <div class="actions">
+                <button type="button" class="btn" id="btnRelicClear">新規クリア</button>
+                <button type="submit" class="btn primary">登録/更新</button>
+                <button type="button" class="btn danger" id="btnRelicDelete">削除</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <section id="view-effect" class="view">
+        <div class="toolbar">
+          <select id="effectCategory"></select>
+          <input id="effectSearch" placeholder="名称検索" />
+          <button type="button" class="btn" id="btnEffectSearch">検索</button>
+          <button type="button" class="btn" id="btnEffectReload">再読込</button>
+          <button type="button" class="btn primary" id="btnEffectNew">追加</button>
+        </div>
+        <div class="panel">
+          <table>
+            <thead>
+              <tr>
+                <th>EffectId</th><th>Name</th><th>Category</th><th>CanStack</th><th>Value</th><th>Level</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="effectTable"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="bootStatus" class="boot-status">データベースを準備しています…</div>
+
+  <dialog id="effectDialog">
+    <form method="dialog" id="effectForm" class="form">
+      <h2 id="effectDialogTitle">Effect編集</h2>
+      <input type="hidden" id="effRowId" />
+      <label>EffectId <input id="effEffectId" type="number" min="0" required /></label>
+      <label>Name <input id="effName" required /></label>
+      <label>Category <input id="effCategory" /></label>
+      <label><input id="effCanStack" type="checkbox" /> CanStack</label>
+      <label>Value <input id="effValue" type="number" step="0.001" min="0.01" required /></label>
+      <label>Level <input id="effLevel" type="number" min="1" value="1" required /></label>
+      <label>Description <input id="effDescription" /></label>
+      <label>DisplayOrder <input id="effDisplayOrder" type="number" min="0" value="0" /></label>
+      <div class="actions">
+        <button type="submit" class="btn primary" value="ok">OK</button>
+        <button type="button" class="btn" id="btnEffectCancel">キャンセル</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js"></script>
+  <script src="./js/db.js"></script>
+  <script src="./js/calc.js"></script>
+  <script src="./js/api.js"></script>
+  <script src="./js/app.js"></script>
+</body>
+</html>

@@ -1,3 +1,4 @@
+using NightreignRelicSimulator.App.Ui;
 using NightreignRelicSimulator.Core.Constants;
 using NightreignRelicSimulator.Core.Enums;
 using NightreignRelicSimulator.Core.Models;
@@ -10,60 +11,62 @@ namespace NightreignRelicSimulator.App.Forms;
 public sealed class RelicManageForm : Form
 {
     private readonly DataGridView _grid = new();
-    private readonly TextBox _filterNameBox = new() { Width = 160, PlaceholderText = "名前検索" };
-    private readonly ComboBox _filterColorBox = new() { Width = 120, DropDownStyle = ComboBoxStyle.DropDownList };
+    private readonly TextBox _filterNameBox = UiFactory.CreateTextBox(160);
+    private readonly ComboBox _filterColorBox = UiFactory.CreateComboBox(120);
+    private readonly Label _countLabel = UiFactory.CreateMutedLabel("0 件");
 
-    private readonly TextBox _nameBox = new() { Width = 180 };
-    private readonly ComboBox _colorBox = new() { Width = 120, DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly TextBox _memoBox = new() { Width = 220 };
+    private readonly TextBox _nameBox = UiFactory.CreateTextBox(220);
+    private readonly ComboBox _colorBox = UiFactory.CreateComboBox(140);
+    private readonly TextBox _memoBox = UiFactory.CreateTextBox(220);
     private readonly ComboBox[] _effectBoxes = new ComboBox[AppConstants.EffectsPerRelic];
-    private readonly Label _editingLabel = new() { AutoSize = true, Text = "新規登録" };
+    private readonly Label _editingLabel = UiFactory.CreateHeading("新規登録");
 
     private List<RelicListItem> _allItems = [];
-    private List<RelicListItem> _items = [];
     private List<Effect> _effects = [];
     private int? _editingRelicId;
 
     public RelicManageForm()
     {
         Text = "遺物管理";
-        StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(920, 640);
-        MinimizeBox = false;
+        UiFactory.ApplyFormChrome(this);
 
         for (var i = 0; i < _effectBoxes.Length; i++)
         {
-            _effectBoxes[i] = new ComboBox
-            {
-                Width = 280,
-                DropDownStyle = ComboBoxStyle.DropDownList
-            };
+            _effectBoxes[i] = UiFactory.CreateComboBox(280);
         }
 
         _colorBox.DataSource = Enum.GetValues<RelicColor>();
-
         var colorFilterOptions = new List<object> { "(すべて)" };
         colorFilterOptions.AddRange(Enum.GetValues<RelicColor>().Cast<object>());
         _filterColorBox.DataSource = colorFilterOptions;
+        _filterNameBox.PlaceholderText = "名前検索";
 
-        var editor = BuildEditorPanel();
-        editor.Dock = DockStyle.Top;
-        editor.Height = 220;
-
-        var filterBar = new FlowLayoutPanel
+        var split = new SplitContainer
         {
-            Dock = DockStyle.Top,
-            Height = 44,
-            Padding = new Padding(8),
-            WrapContents = false
+            Dock = DockStyle.Fill,
+            Orientation = Orientation.Vertical,
+            SplitterDistance = 420,
+            BackColor = UiTheme.Border,
+            Panel1MinSize = 280,
+            Panel2MinSize = 360
         };
-        filterBar.Controls.Add(new Label { Text = "色", AutoSize = true, Padding = new Padding(0, 6, 0, 0) });
-        filterBar.Controls.Add(_filterColorBox);
-        filterBar.Controls.Add(_filterNameBox);
-        filterBar.Controls.Add(CreateButton("検索", ApplyFilterAsync));
-        filterBar.Controls.Add(CreateButton("再読込", LoadAsync));
-        filterBar.Controls.Add(CreateButton("選択を編集", LoadSelectedToEditorAsync));
-        filterBar.Controls.Add(CreateButton("削除", DeleteAsync));
+        split.Panel1.Controls.Add(BuildListPanel());
+        split.Panel2.Controls.Add(BuildEditorPanel());
+
+        Controls.Add(split);
+        Shown += async (_, _) => await UiHelper.RunAsync(InitializeAsync, this);
+    }
+
+    private Panel BuildListPanel()
+    {
+        var panel = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.Background };
+
+        var toolbar = UiFactory.CreateToolbar();
+        toolbar.Controls.Add(UiFactory.CreateMutedLabel("色"));
+        toolbar.Controls.Add(_filterColorBox);
+        toolbar.Controls.Add(_filterNameBox);
+        toolbar.Controls.Add(UiFactory.CreateAsyncButton("検索", ApplyFilterAsync, this));
+        toolbar.Controls.Add(UiFactory.CreateAsyncButton("再読込", LoadAsync, this));
 
         _filterNameBox.KeyDown += (_, e) =>
         {
@@ -75,32 +78,42 @@ public sealed class RelicManageForm : Form
         };
         _filterColorBox.SelectedIndexChanged += (_, _) => ApplyFilterLocal();
 
+        UiFactory.ConfigureGrid(_grid);
         _grid.Dock = DockStyle.Fill;
-        _grid.ReadOnly = true;
-        _grid.AllowUserToAddRows = false;
-        _grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        _grid.MultiSelect = false;
-        _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-        _grid.RowHeadersVisible = false;
         _grid.CellDoubleClick += async (_, _) => await UiHelper.RunAsync(LoadSelectedToEditorAsync, this);
 
-        Controls.Add(_grid);
-        Controls.Add(filterBar);
-        Controls.Add(editor);
+        var footer = new Panel
+        {
+            Dock = DockStyle.Bottom,
+            Height = 36,
+            Padding = new Padding(12, 8, 12, 8),
+            BackColor = UiTheme.SurfaceAlt
+        };
+        footer.Controls.Add(_countLabel);
 
-        Shown += async (_, _) => await UiHelper.RunAsync(InitializeAsync, this);
+        panel.Controls.Add(_grid);
+        panel.Controls.Add(footer);
+        panel.Controls.Add(toolbar);
+        return panel;
     }
 
     private Panel BuildEditorPanel()
     {
-        var panel = new Panel { Padding = new Padding(8) };
-        var layout = new TableLayoutPanel
+        var panel = new Panel
         {
             Dock = DockStyle.Fill,
+            BackColor = UiTheme.Surface,
+            Padding = new Padding(20)
+        };
+
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            Height = 320,
             ColumnCount = 2,
             RowCount = 7
         };
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
         layout.Controls.Add(_editingLabel, 1, 0);
@@ -114,33 +127,40 @@ public sealed class RelicManageForm : Form
 
         var buttons = new FlowLayoutPanel
         {
-            Dock = DockStyle.Bottom,
-            Height = 36,
-            FlowDirection = FlowDirection.LeftToRight
+            Dock = DockStyle.Top,
+            Height = 48,
+            Padding = new Padding(0, 12, 0, 0),
+            WrapContents = false
         };
-        buttons.Controls.Add(CreateButton("新規クリア", () =>
+        buttons.Controls.Add(UiFactory.CreateAsyncButton("新規クリア", () =>
         {
             ClearEditor();
             return Task.CompletedTask;
-        }));
-        buttons.Controls.Add(CreateButton("登録/更新", SaveAsync));
+        }, this, 110));
+        buttons.Controls.Add(UiFactory.CreateAsyncButton("選択を編集", LoadSelectedToEditorAsync, this, 110));
+        buttons.Controls.Add(UiFactory.CreateAsyncButton("登録/更新", SaveAsync, this, 110, primary: true));
+        buttons.Controls.Add(UiFactory.CreateAsyncButton("削除", DeleteAsync, this, 90));
 
-        panel.Controls.Add(layout);
+        var hint = UiFactory.CreateMutedLabel("一覧をダブルクリックで編集できます。効果はマスタから選択します。");
+        hint.Dock = DockStyle.Top;
+        hint.Padding = new Padding(0, 8, 0, 0);
+
+        panel.Controls.Add(hint);
         panel.Controls.Add(buttons);
+        panel.Controls.Add(layout);
         return panel;
     }
 
     private static void AddRow(TableLayoutPanel layout, int row, string label, Control control)
     {
-        layout.Controls.Add(new Label { Text = label, AutoSize = true }, 0, row);
+        layout.Controls.Add(new Label
+        {
+            Text = label,
+            AutoSize = true,
+            ForeColor = UiTheme.TextMuted,
+            Anchor = AnchorStyles.Left
+        }, 0, row);
         layout.Controls.Add(control, 1, row);
-    }
-
-    private Button CreateButton(string text, Func<Task> action)
-    {
-        var button = new Button { Text = text, AutoSize = true, Height = 28 };
-        button.Click += async (_, _) => await UiHelper.RunAsync(action, this);
-        return button;
     }
 
     private async Task InitializeAsync()
@@ -199,33 +219,34 @@ public sealed class RelicManageForm : Form
     private void ApplyFilterLocal()
     {
         var colorFilter = _filterColorBox.SelectedItem;
-        _items = colorFilter is RelicColor color
+        var items = colorFilter is RelicColor color
             ? _allItems.Where(r => r.Color == color).ToList()
             : _allItems.ToList();
 
         _grid.DataSource = null;
-        _grid.DataSource = _items
-            .Select(r => new { r.Id, r.Name, Color = r.Color.ToString(), r.EffectCount })
+        _grid.DataSource = items
+            .Select(r => new { r.Id, r.Name, Color = r.Color.ToString(), Effects = r.EffectCount })
             .ToList();
+        _countLabel.Text = $"{items.Count} 件";
     }
 
     private async Task LoadSelectedToEditorAsync()
     {
         if (_grid.CurrentRow?.Cells["Id"]?.Value is not int id)
         {
-            MessageBox.Show(this, "編集する遺物を選択してください。", Text);
+            UiHelper.ShowInfo(this, "編集する遺物を選択してください。");
             return;
         }
 
         var detail = await AppServices.Relics.GetDetailAsync(id).ConfigureAwait(true);
         if (detail is null)
         {
-            MessageBox.Show(this, "遺物が見つかりません。", Text);
+            UiHelper.ShowInfo(this, "遺物が見つかりません。");
             return;
         }
 
         _editingRelicId = detail.Relic.Id;
-        _editingLabel.Text = $"編集中 Id={detail.Relic.Id}";
+        _editingLabel.Text = $"編集中  Id={detail.Relic.Id}";
         _nameBox.Text = detail.Relic.Name;
         _colorBox.SelectedItem = detail.Relic.Color;
         _memoBox.Text = detail.Relic.Memo;
@@ -242,7 +263,7 @@ public sealed class RelicManageForm : Form
     {
         if (string.IsNullOrWhiteSpace(_nameBox.Text))
         {
-            MessageBox.Show(this, "名前は必須です。", Text);
+            UiHelper.ShowInfo(this, "名前は必須です。");
             return;
         }
 
@@ -279,12 +300,12 @@ public sealed class RelicManageForm : Form
     {
         if (_grid.CurrentRow?.Cells["Id"]?.Value is not int id)
         {
-            MessageBox.Show(this, "削除する遺物を選択してください。", Text);
+            UiHelper.ShowInfo(this, "削除する遺物を選択してください。");
             return;
         }
 
         var name = _grid.CurrentRow.Cells["Name"]?.Value?.ToString() ?? id.ToString();
-        if (MessageBox.Show(this, $"「{name}」を削除しますか？", Text, MessageBoxButtons.YesNo) != DialogResult.Yes)
+        if (!UiHelper.Confirm(this, $"「{name}」を削除しますか？"))
         {
             return;
         }

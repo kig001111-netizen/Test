@@ -1,0 +1,403 @@
+:root {
+  --bg: #121214;
+  --surface: #1c1c20;
+  --surface-alt: #24242a;
+  --border: #3a3a42;
+  --accent: #c48c40;
+  --accent-soft: #48341c;
+  --text: #ece8e0;
+  --muted: #a09c94;
+  --danger: #b44848;
+  --nav-selected: #30281c;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100%;
+}
+
+body {
+  padding-bottom: var(--safe-bottom);
+}
+
+.boot-status {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 1rem;
+  z-index: 1000;
+}
+
+.boot-status[hidden] {
+  display: none;
+}
+
+.app {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+.nav {
+  background: var(--bg);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+
+.brand {
+  padding: 18px 16px;
+  background: var(--surface);
+}
+
+.brand-title {
+  color: var(--accent);
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.brand-sub {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.nav-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 8px;
+  flex: 1;
+}
+
+.nav-btn {
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  padding: 12px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.nav-btn.active,
+.nav-btn:hover {
+  background: var(--nav-selected);
+  color: var(--accent);
+}
+
+.nav-footer {
+  padding: 12px 16px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.85rem;
+  white-space: pre-line;
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.header {
+  padding: 16px 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+
+.view {
+  display: none;
+  padding: 16px 20px 24px;
+  gap: 16px;
+  flex-direction: column;
+}
+
+.view.active {
+  display: flex;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  background: var(--surface-alt);
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+
+.toolbar label {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  color: var(--muted);
+  flex: 1 1 160px;
+}
+
+.toolbar label select,
+.toolbar label input {
+  flex: 1;
+  min-width: 0;
+}
+
+input, select, button, textarea {
+  font: inherit;
+}
+
+input, select {
+  background: var(--surface-alt);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 8px;
+  min-height: 42px;
+  min-width: 0;
+}
+
+.btn {
+  background: var(--surface-alt);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  cursor: pointer;
+  min-height: 42px;
+}
+
+.btn.primary {
+  background: var(--accent);
+  color: #140f0a;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.btn.danger {
+  color: #ffd0d0;
+  border-color: var(--danger);
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  background: var(--surface);
+  padding: 16px;
+  border-radius: 8px;
+}
+
+.result {
+  font-size: clamp(1.4rem, 4vw, 1.8rem);
+  font-weight: 700;
+  margin-top: 4px;
+  word-break: break-all;
+}
+
+.result.accent { color: var(--accent); }
+.muted { color: var(--muted); }
+
+.staged-controls {
+  display: grid;
+  gap: 10px;
+}
+
+.staged-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+  background: var(--surface-alt);
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+
+.staged-item strong {
+  display: block;
+  margin-bottom: 2px;
+}
+
+.staged-item .value-hint {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.panel {
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 12px;
+  min-width: 0;
+}
+
+.panel h2 {
+  margin: 0 0 10px;
+  font-size: 1rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+th, td {
+  border-bottom: 1px solid var(--border);
+  padding: 10px 6px;
+  text-align: left;
+}
+
+tbody tr {
+  cursor: pointer;
+}
+
+tbody tr:hover,
+tbody tr.selected {
+  background: var(--accent-soft);
+}
+
+ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 240px;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+ul li {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+
+pre {
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+  background: var(--surface-alt);
+  padding: 10px;
+  border-radius: 6px;
+  font-family: Consolas, monospace;
+  font-size: 0.85rem;
+  -webkit-overflow-scrolling: touch;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+dialog {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 16px;
+  width: min(420px, 92vw);
+  max-height: 90vh;
+  overflow: auto;
+}
+
+dialog::backdrop {
+  background: rgba(0, 0, 0, 0.55);
+}
+
+@media (max-width: 960px) {
+  .app {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .nav {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .brand {
+    padding: 12px 14px 8px;
+  }
+
+  .nav-buttons {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 6px;
+    padding: 8px 10px 12px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .nav-btn {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    padding: 10px 14px;
+  }
+
+  .nav-footer {
+    display: none;
+  }
+
+  .header {
+    padding: 12px 14px;
+  }
+
+  .view {
+    padding: 12px 12px 28px;
+  }
+
+  .split,
+  .summary {
+    grid-template-columns: 1fr;
+  }
+
+  .staged-item {
+    grid-template-columns: 1fr;
+  }
+
+  table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}

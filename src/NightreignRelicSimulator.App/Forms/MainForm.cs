@@ -1,126 +1,210 @@
 using NightreignRelicSimulator.Core.Constants;
-using NightreignRelicSimulator.Core.Exceptions;
+using NightreignRelicSimulator.App.Ui;
 
 namespace NightreignRelicSimulator.App.Forms;
 
 /// <summary>
-/// アプリケーションのホーム画面です。各管理画面への遷移のみを担当します。
+/// アプリケーションのシェル画面です。サイドナビで各機能画面を切り替えます。
 /// </summary>
 public sealed class MainForm : Form
 {
-    /// <summary>
-    /// <see cref="MainForm"/> の新しいインスタンスを初期化します。
-    /// </summary>
+    private readonly Panel _contentHost = new() { Dock = DockStyle.Fill, BackColor = UiTheme.Background };
+    private readonly Label _screenTitle = new();
+    private readonly Label _sessionLabel = new();
+    private readonly Dictionary<string, Button> _navButtons = new(StringComparer.Ordinal);
+    private Form? _currentChild;
+    private string _currentKey = string.Empty;
+
     public MainForm()
     {
         Text = AppConstants.ApplicationName;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(480, 360);
-        FormBorderStyle = FormBorderStyle.FixedSingle;
-        MaximizeBox = false;
+        MinimumSize = new Size(1100, 700);
+        ClientSize = new Size(1280, 800);
+        UiFactory.ApplyFormChrome(this);
 
-        var title = new Label
+        var root = new TableLayoutPanel
         {
-            Text = AppConstants.ApplicationName,
-            Font = new Font("Segoe UI", 14F, FontStyle.Bold),
-            AutoSize = true,
-            Location = new Point(24, 24)
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            BackColor = UiTheme.Background
         };
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 220));
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
 
-        var hint = new Label
-        {
-            Text = "武器表示火力は画面間で引き継がれます（DB未保存）。",
-            AutoSize = true,
-            Location = new Point(24, 60)
-        };
+        root.Controls.Add(BuildNavPanel(), 0, 0);
+        root.Controls.Add(BuildMainColumn(), 1, 0);
+        Controls.Add(root);
 
-        var panel = new FlowLayoutPanel
-        {
-            Location = new Point(24, 100),
-            Size = new Size(420, 220),
-            FlowDirection = FlowDirection.TopDown,
-            WrapContents = false
-        };
-
-        panel.Controls.Add(CreateNavButton("Effect管理", () => new EffectManageForm()));
-        panel.Controls.Add(CreateNavButton("遺物管理", () => new RelicManageForm()));
-        panel.Controls.Add(CreateNavButton("ビルド管理", () => new BuildManageForm()));
-        panel.Controls.Add(CreateNavButton("火力計算", () => new DamageCalculatorForm()));
-
-        Controls.Add(title);
-        Controls.Add(hint);
-        Controls.Add(panel);
+        Shown += (_, _) => OpenDamageCalculator();
+        Activated += (_, _) => RefreshSessionLabel();
     }
 
-    private static Button CreateNavButton(string text, Func<Form> formFactory)
+    /// <summary>
+    /// 火力計算画面へ切り替えます。
+    /// </summary>
+    public void OpenDamageCalculator() =>
+        Navigate("calc", "火力計算", () => new DamageCalculatorForm());
+
+    private Panel BuildNavPanel()
+    {
+        var nav = new Panel
+        {
+            Dock = DockStyle.Fill,
+            BackColor = UiTheme.Background,
+            Padding = new Padding(0, 0, 1, 0)
+        };
+
+        var brand = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 88,
+            BackColor = UiTheme.Surface,
+            Padding = new Padding(16, 18, 16, 12)
+        };
+        var brandTitle = new Label
+        {
+            Text = "NIGHTREIGN",
+            Dock = DockStyle.Top,
+            Height = 28,
+            Font = UiTheme.HeadingFont,
+            ForeColor = UiTheme.Accent
+        };
+        var brandSub = new Label
+        {
+            Text = "Relic Simulator",
+            Dock = DockStyle.Top,
+            Height = 22,
+            Font = UiTheme.BodyFont,
+            ForeColor = UiTheme.TextMuted
+        };
+        brand.Controls.Add(brandSub);
+        brand.Controls.Add(brandTitle);
+
+        var buttons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            Padding = new Padding(8, 12, 8, 8),
+            BackColor = UiTheme.Background
+        };
+
+        buttons.Controls.Add(CreateNav("calc", "火力計算", () => new DamageCalculatorForm()));
+        buttons.Controls.Add(CreateNav("build", "ビルド管理", () => new BuildManageForm()));
+        buttons.Controls.Add(CreateNav("relic", "遺物管理", () => new RelicManageForm()));
+        buttons.Controls.Add(CreateNav("effect", "Effect管理", () => new EffectManageForm()));
+
+        var footer = new Panel
+        {
+            Dock = DockStyle.Bottom,
+            Height = 56,
+            Padding = new Padding(12),
+            BackColor = UiTheme.Surface
+        };
+        _sessionLabel.Dock = DockStyle.Fill;
+        _sessionLabel.ForeColor = UiTheme.TextMuted;
+        _sessionLabel.Font = UiTheme.BodyFont;
+        footer.Controls.Add(_sessionLabel);
+
+        nav.Controls.Add(buttons);
+        nav.Controls.Add(footer);
+        nav.Controls.Add(brand);
+        return nav;
+    }
+
+    private Panel BuildMainColumn()
+    {
+        var column = new Panel { Dock = DockStyle.Fill, BackColor = UiTheme.Background };
+
+        var header = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 64,
+            BackColor = UiTheme.Surface,
+            Padding = new Padding(20, 16, 20, 12)
+        };
+        _screenTitle.Text = "火力計算";
+        _screenTitle.Font = UiTheme.TitleFont;
+        _screenTitle.ForeColor = UiTheme.TextPrimary;
+        _screenTitle.AutoSize = true;
+        header.Controls.Add(_screenTitle);
+
+        var border = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 1,
+            BackColor = UiTheme.Border
+        };
+
+        column.Controls.Add(_contentHost);
+        column.Controls.Add(border);
+        column.Controls.Add(header);
+        return column;
+    }
+
+    private Button CreateNav(string key, string title, Func<Form> factory)
     {
         var button = new Button
         {
-            Text = text,
-            Width = 400,
-            Height = 40,
-            Margin = new Padding(0, 0, 0, 8)
+            Text = "  " + title,
+            Width = 196,
+            Margin = new Padding(0, 0, 0, 4)
         };
-
-        button.Click += (_, _) =>
-        {
-            try
-            {
-                using var form = formFactory();
-                form.ShowDialog();
-            }
-            catch (Exception ex)
-            {
-                UiHelper.ShowError(ex);
-            }
-        };
-
+        UiFactory.StyleNavButton(button, selected: false);
+        button.Click += (_, _) => Navigate(key, title, factory);
+        _navButtons[key] = button;
         return button;
     }
-}
 
-/// <summary>
-/// WinForms 向けの共通 UI ヘルパーです。
-/// </summary>
-internal static class UiHelper
-{
-    public static void ShowError(Exception ex)
+    private void Navigate(string key, string title, Func<Form> factory)
     {
-        var message = ex is ServiceException or AggregateException
-            ? GetMessage(ex)
-            : ex.Message;
+        if (_currentKey == key && _currentChild is { IsDisposed: false })
+        {
+            RefreshSessionLabel();
+            return;
+        }
 
-        MessageBox.Show(
-            message,
-            AppConstants.ApplicationName,
-            MessageBoxButtons.OK,
-            MessageBoxIcon.Error);
-    }
-
-    public static async Task RunAsync(Func<Task> action, Control owner)
-    {
         try
         {
-            owner.Enabled = false;
-            await action().ConfigureAwait(true);
+            _contentHost.SuspendLayout();
+            _contentHost.Controls.Clear();
+            _currentChild?.Dispose();
+
+            var child = factory();
+            child.TopLevel = false;
+            child.FormBorderStyle = FormBorderStyle.None;
+            child.Dock = DockStyle.Fill;
+            child.BackColor = UiTheme.Background;
+            UiFactory.ApplyFormChrome(child);
+
+            _contentHost.Controls.Add(child);
+            child.Show();
+            _currentChild = child;
+            _currentKey = key;
+            _screenTitle.Text = title;
+
+            foreach (var (navKey, button) in _navButtons)
+            {
+                UiFactory.StyleNavButton(button, selected: navKey == key);
+            }
+
+            RefreshSessionLabel();
         }
         catch (Exception ex)
         {
-            ShowError(ex);
+            UiHelper.ShowError(ex);
         }
         finally
         {
-            owner.Enabled = true;
+            _contentHost.ResumeLayout();
         }
     }
 
-    private static string GetMessage(Exception ex)
+    private void RefreshSessionLabel()
     {
-        if (ex is AggregateException aggregate)
-        {
-            return aggregate.Flatten().InnerExceptions.FirstOrDefault()?.Message ?? ex.Message;
-        }
-
-        return ex.Message;
+        var build = UiSessionState.SelectedBuildId is int id ? $"Build #{id}" : "Build未選択";
+        _sessionLabel.Text = $"火力 {UiSessionState.WeaponAttack:0}\n{build}";
     }
 }

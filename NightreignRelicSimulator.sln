@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NightreignRelicSimulator.Se
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NightreignRelicSimulator.App", "src\NightreignRelicSimulator.App\NightreignRelicSimulator.App.csproj", "{CE62632B-FE95-4BAE-A584-3D975C08224A}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NightreignRelicSimulator.Web", "src\NightreignRelicSimulator.Web\NightreignRelicSimulator.Web.csproj", "{D2934A4E-0ACF-4490-881C-7F111297927F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -71,6 +73,18 @@ Global
 		{CE62632B-FE95-4BAE-A584-3D975C08224A}.Release|x64.Build.0 = Release|Any CPU
 		{CE62632B-FE95-4BAE-A584-3D975C08224A}.Release|x86.ActiveCfg = Release|Any CPU
 		{CE62632B-FE95-4BAE-A584-3D975C08224A}.Release|x86.Build.0 = Release|Any CPU
+		{D2934A4E-0ACF-4490-881C-7F111297927F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D2934A4E-0ACF-4490-881C-7F111297927F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D2934A4E-0ACF-4490-881C-7F111297927F}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{D2934A4E-0ACF-4490-881C-7F111297927F}.Debug|x64.Build.0 = Debug|Any CPU
+		{D2934A4E-0ACF-4490-881C-7F111297927F}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{D2934A4E-0ACF-4490-881C-7F111297927F}.Debug|x86.Build.0 = Debug|Any CPU
+		{D2934A4E-0ACF-4490-881C-7F111297927F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D2934A4E-0ACF-4490-881C-7F111297927F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D2934A4E-0ACF-4490-881C-7F111297927F}.Release|x64.ActiveCfg = Release|Any CPU
+		{D2934A4E-0ACF-4490-881C-7F111297927F}.Release|x64.Build.0 = Release|Any CPU
+		{D2934A4E-0ACF-4490-881C-7F111297927F}.Release|x86.ActiveCfg = Release|Any CPU
+		{D2934A4E-0ACF-4490-881C-7F111297927F}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -80,5 +94,6 @@ Global
 		{C4E14FD4-54DD-4D0C-B187-94A49073F4E5} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{296F9F7C-CA26-4217-BC5C-DA6CC9011B92} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{CE62632B-FE95-4BAE-A584-3D975C08224A} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{D2934A4E-0ACF-4490-881C-7F111297927F} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal
