@@ -10,4 +10,7 @@ internal static class UiSessionState
 
     /// <summary>直近に選択・編集したビルド Id。</summary>
     public static int? SelectedBuildId { get; set; }
+
+    /// <summary>段階効果の Level 上書き（キー: EffectId）。</summary>
+    public static Dictionary<int, int> LevelOverrides { get; } = new();
 }

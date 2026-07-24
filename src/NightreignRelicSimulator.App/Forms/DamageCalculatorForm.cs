@@ -1,15 +1,20 @@
 using NightreignRelicSimulator.App.Ui;
 using NightreignRelicSimulator.Core.Models;
+using NightreignRelicSimulator.Services.Calculation;
 
 namespace NightreignRelicSimulator.App.Forms;
 
 /// <summary>
 /// 火力計算画面です。最終火力 = 武器表示火力 × 全倍率。
 /// </summary>
+/// <remarks>
+/// 段階効果（複数 Level）は遺物では1件として登録し、ここで Level を指定します。
+/// </remarks>
 public sealed class DamageCalculatorForm : Form
 {
     private readonly NumericUpDown _weaponAttackBox = UiFactory.CreateNumeric(0, 999999);
     private readonly ComboBox _buildBox = UiFactory.CreateComboBox(320);
+    private readonly FlowLayoutPanel _stagedPanel = new();
     private readonly Label _baseAttackLabel = new();
     private readonly Label _totalMultiplierLabel = new();
     private readonly Label _finalAttackLabel = new();
@@ -19,6 +24,8 @@ public sealed class DamageCalculatorForm : Form
     private readonly TextBox _logBox = new();
 
     private List<Build> _builds = [];
+    private List<Effect> _catalog = [];
+    private readonly Dictionary<int, ComboBox> _stagedLevelBoxes = new();
 
     public DamageCalculatorForm()
     {
@@ -37,6 +44,7 @@ public sealed class DamageCalculatorForm : Form
         toolbar.Controls.Add(UiFactory.CreateAsyncButton("計算", CalculateAsync, this, 100, primary: true));
         toolbar.Controls.Add(UiFactory.CreateAsyncButton("ビルド再読込", LoadBuildsAsync, this, 120));
 
+        var stagedHost = BuildStagedHost();
         var summary = BuildSummaryPanel();
 
         var split = new SplitContainer
@@ -66,9 +74,10 @@ public sealed class DamageCalculatorForm : Form
 
         Controls.Add(split);
         Controls.Add(summary);
+        Controls.Add(stagedHost);
         Controls.Add(toolbar);
 
-        Shown += async (_, _) => await UiHelper.RunAsync(LoadBuildsAsync, this);
+        Shown += async (_, _) => await UiHelper.RunAsync(InitializeAsync, this);
         FormClosing += (_, _) =>
         {
             UiSessionState.WeaponAttack = _weaponAttackBox.Value;
@@ -77,6 +86,37 @@ public sealed class DamageCalculatorForm : Form
                 UiSessionState.SelectedBuildId = buildId;
             }
         };
+    }
+
+    private Panel BuildStagedHost()
+    {
+        var panel = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 0,
+            Visible = false,
+            BackColor = UiTheme.Surface,
+            Padding = new Padding(16, 8, 16, 8)
+        };
+
+        var title = UiFactory.CreateHeading("段階効果レベル");
+        title.Dock = DockStyle.Top;
+        title.Height = 28;
+
+        var hint = UiFactory.CreateMutedLabel("封牢・夜の侵入などは遺物では1効果として扱い、ここでレベルを変更します。");
+        hint.Dock = DockStyle.Top;
+        hint.Height = 22;
+
+        _stagedPanel.Dock = DockStyle.Fill;
+        _stagedPanel.AutoScroll = true;
+        _stagedPanel.WrapContents = true;
+        _stagedPanel.FlowDirection = FlowDirection.TopDown;
+
+        panel.Controls.Add(_stagedPanel);
+        panel.Controls.Add(hint);
+        panel.Controls.Add(title);
+        panel.Tag = "stagedHost";
+        return panel;
     }
 
     private Panel BuildSummaryPanel()
@@ -166,6 +206,12 @@ public sealed class DamageCalculatorForm : Form
         box.Font = UiTheme.MonoFont;
     }
 
+    private async Task InitializeAsync()
+    {
+        _catalog = (await AppServices.Effects.GetAllAsync().ConfigureAwait(true)).ToList();
+        await LoadBuildsAsync().ConfigureAwait(true);
+    }
+
     private async Task LoadBuildsAsync()
     {
         _builds = (await AppServices.Builds.GetAllAsync().ConfigureAwait(true)).ToList();
@@ -194,6 +240,11 @@ public sealed class DamageCalculatorForm : Form
         UiSessionState.SelectedBuildId = buildId;
         UiSessionState.WeaponAttack = _weaponAttackBox.Value;
 
+        if (_catalog.Count == 0)
+        {
+            _catalog = (await AppServices.Effects.GetAllAsync().ConfigureAwait(true)).ToList();
+        }
+
         var detail = await AppServices.Builds.LoadAsync(buildId).ConfigureAwait(true);
         if (detail is null)
         {
@@ -216,17 +267,26 @@ public sealed class DamageCalculatorForm : Form
             }
         }
 
+        RenderStagedControls(effects);
+
         var result = AppServices.DamageCalculator.Calculate(new DamageCalculationRequest
         {
             WeaponAttack = _weaponAttackBox.Value,
-            Effects = effects
+            Effects = effects,
+            EffectCatalog = _catalog,
+            LevelOverrides = new Dictionary<int, int>(UiSessionState.LevelOverrides)
         });
 
+        ApplyResult(effects.Count, result);
+    }
+
+    private void ApplyResult(int inputCount, CalculationResult result)
+    {
         _baseAttackLabel.Text = $"{result.BaseAttack:0.####}";
         _totalMultiplierLabel.Text = $"× {result.TotalMultiplier:0.########}";
         _finalAttackLabel.Text = $"{result.FinalAttack:0.####}";
         _effectCountLabel.Text =
-            $"入力効果 {effects.Count}  /  適用 {result.AppliedEffects.Count}  /  無効 {result.IgnoredEffects.Count}";
+            $"入力効果 {inputCount}  /  適用 {result.AppliedEffects.Count}  /  無効 {result.IgnoredEffects.Count}";
 
         _appliedList.DataSource = result.AppliedEffects
             .Select(e => $"[{e.Category}] EffectId={e.EffectId} Lv{e.Level}  {e.Name}  ×{e.Value}")
@@ -240,6 +300,151 @@ public sealed class DamageCalculatorForm : Form
                 $"[{l.Step}] {l.Description}" +
                 (l.Multiplier is null ? string.Empty : $"  (×{l.Multiplier})") +
                 $"  → {l.CurrentAttack:0.####}"));
+    }
+
+    private async Task RecalculateWithCurrentBuildAsync()
+    {
+        if (_buildBox.SelectedValue is not int buildId)
+        {
+            return;
+        }
+
+        var detail = await AppServices.Builds.LoadAsync(buildId).ConfigureAwait(true);
+        if (detail is null)
+        {
+            return;
+        }
+
+        var effects = new List<Effect>();
+        foreach (var slot in detail.Slots.OrderBy(s => s.Position))
+        {
+            var relicDetail = await AppServices.Relics.GetDetailAsync(slot.Relic.Id).ConfigureAwait(true);
+            if (relicDetail is null)
+            {
+                continue;
+            }
+
+            foreach (var effectSlot in relicDetail.Slots.OrderBy(s => s.SlotNumber))
+            {
+                effects.Add(effectSlot.Effect);
+            }
+        }
+
+        var result = AppServices.DamageCalculator.Calculate(new DamageCalculationRequest
+        {
+            WeaponAttack = _weaponAttackBox.Value,
+            Effects = effects,
+            EffectCatalog = _catalog,
+            LevelOverrides = new Dictionary<int, int>(UiSessionState.LevelOverrides)
+        });
+        ApplyResult(effects.Count, result);
+    }
+
+    private void RenderStagedControls(IReadOnlyList<Effect> equipped)
+    {
+        var host = Controls.OfType<Panel>().FirstOrDefault(p => Equals(p.Tag, "stagedHost"));
+        if (host is null)
+        {
+            return;
+        }
+
+        var definitions = StagedEffectResolver.GetDefinitions(_catalog)
+            .Where(d => equipped.Any(e => e.EffectId == d.EffectId))
+            .ToList();
+
+        var signature = string.Join(",", definitions.Select(d => d.EffectId));
+        var previousSignature = host.Name;
+        if (signature == previousSignature && _stagedLevelBoxes.Count == definitions.Count)
+        {
+            foreach (var def in definitions)
+            {
+                if (!_stagedLevelBoxes.TryGetValue(def.EffectId, out var combo))
+                {
+                    continue;
+                }
+
+                var selected = UiSessionState.LevelOverrides.TryGetValue(def.EffectId, out var saved)
+                    ? saved
+                    : equipped.First(e => e.EffectId == def.EffectId).Level;
+                if (combo.SelectedValue is int current && current == selected)
+                {
+                    continue;
+                }
+
+                combo.SelectedValue = selected;
+            }
+
+            return;
+        }
+
+        host.Name = signature;
+        _stagedPanel.SuspendLayout();
+        _stagedPanel.Controls.Clear();
+        _stagedLevelBoxes.Clear();
+
+        if (definitions.Count == 0)
+        {
+            host.Visible = false;
+            host.Height = 0;
+            _stagedPanel.ResumeLayout();
+            return;
+        }
+
+        foreach (var def in definitions)
+        {
+            var row = new FlowLayoutPanel
+            {
+                AutoSize = true,
+                WrapContents = false,
+                Margin = new Padding(0, 4, 12, 4)
+            };
+
+            var label = UiFactory.CreateMutedLabel($"{def.Name} (EffectId={def.EffectId})");
+            label.AutoSize = true;
+            label.Margin = new Padding(0, 8, 8, 0);
+
+            var combo = UiFactory.CreateComboBox(160);
+            var options = def.Levels
+                .Select(l => new LevelOption(l.Level, $"Lv{l.Level} (×{l.Value})"))
+                .ToList();
+            combo.DisplayMember = nameof(LevelOption.Text);
+            combo.ValueMember = nameof(LevelOption.Level);
+            combo.DataSource = options;
+
+            var selected = UiSessionState.LevelOverrides.TryGetValue(def.EffectId, out var saved)
+                ? saved
+                : equipped.First(e => e.EffectId == def.EffectId).Level;
+            if (options.Any(o => o.Level == selected))
+            {
+                combo.SelectedValue = selected;
+            }
+
+            var effectId = def.EffectId;
+            combo.SelectedIndexChanged += async (_, _) =>
+            {
+                if (combo.SelectedValue is not int level)
+                {
+                    return;
+                }
+
+                if (UiSessionState.LevelOverrides.TryGetValue(effectId, out var existing) && existing == level)
+                {
+                    return;
+                }
+
+                UiSessionState.LevelOverrides[effectId] = level;
+                await UiHelper.RunAsync(RecalculateWithCurrentBuildAsync, this);
+            };
+
+            _stagedLevelBoxes[effectId] = combo;
+            row.Controls.Add(label);
+            row.Controls.Add(combo);
+            _stagedPanel.Controls.Add(row);
+        }
+
+        host.Visible = true;
+        host.Height = Math.Min(140, 70 + (definitions.Count * 40));
+        _stagedPanel.ResumeLayout();
     }
 
     private static decimal ClampAttack(decimal value)
@@ -261,6 +466,18 @@ public sealed class DamageCalculatorForm : Form
         }
 
         public int Id { get; }
+        public string Text { get; }
+    }
+
+    private sealed class LevelOption
+    {
+        public LevelOption(int level, string text)
+        {
+            Level = level;
+            Text = text;
+        }
+
+        public int Level { get; }
         public string Text { get; }
     }
 }

@@ -2,6 +2,7 @@ using NightreignRelicSimulator.App.Ui;
 using NightreignRelicSimulator.Core.Constants;
 using NightreignRelicSimulator.Core.Enums;
 using NightreignRelicSimulator.Core.Models;
+using NightreignRelicSimulator.Services.Calculation;
 
 namespace NightreignRelicSimulator.App.Forms;
 
@@ -165,11 +166,22 @@ public sealed class RelicManageForm : Form
 
     private async Task InitializeAsync()
     {
-        _effects = (await AppServices.Effects.GetAllAsync().ConfigureAwait(true)).ToList();
+        var catalog = (await AppServices.Effects.GetAllAsync().ConfigureAwait(true)).ToList();
+        _effects = StagedEffectResolver.CollapseForRelicSelection(catalog).ToList();
+        var stagedIds = StagedEffectResolver.GetDefinitions(catalog)
+            .Select(d => d.EffectId)
+            .ToHashSet();
+
         foreach (var box in _effectBoxes)
         {
             var options = new List<EffectOption> { new(0, "(なし)") };
-            options.AddRange(_effects.Select(e => new EffectOption(e.Id, $"{e.EffectId}: {e.Name} (Lv{e.Level})")));
+            options.AddRange(_effects.Select(e =>
+            {
+                var label = stagedIds.Contains(e.EffectId)
+                    ? $"{e.EffectId}: {e.Name}（段階・計算でLv指定）"
+                    : $"{e.EffectId}: {e.Name}";
+                return new EffectOption(e.Id, label);
+            }));
             box.DisplayMember = nameof(EffectOption.Text);
             box.ValueMember = nameof(EffectOption.RowId);
             box.DataSource = options.ToList();
@@ -255,7 +267,15 @@ public sealed class RelicManageForm : Form
         {
             var slotNumber = i + 1;
             var slot = detail.Slots.FirstOrDefault(s => s.SlotNumber == slotNumber);
-            _effectBoxes[i].SelectedValue = slot?.Effect.Id ?? 0;
+            if (slot is null)
+            {
+                _effectBoxes[i].SelectedValue = 0;
+                continue;
+            }
+
+            // 段階効果は遺物側では代表行（最小 Level）の Id に正規化
+            var collapsed = _effects.FirstOrDefault(e => e.EffectId == slot.Effect.EffectId);
+            _effectBoxes[i].SelectedValue = collapsed?.Id ?? slot.Effect.Id;
         }
     }
 

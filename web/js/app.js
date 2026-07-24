@@ -105,8 +105,15 @@ async function loadEffects(params = {}) {
 }
 
 function fillEffectSlotOptions() {
-  const source = state.relicEffects.length ? state.relicEffects : state.effects;
-  const stagedIds = new Set((state.stagedDefs || []).map((d) => d.effectId));
+  const source = (state.relicEffects.length
+    ? state.relicEffects
+    : Calc.collapseForRelicSelection(state.effects));
+  const stagedIds = new Set(
+    (state.stagedDefs && state.stagedDefs.length
+      ? state.stagedDefs
+      : Calc.getStagedDefinitions(state.effects)
+    ).map((d) => d.effectId)
+  );
   const options = [`<option value="">(なし)</option>`]
     .concat(source.map((e) => {
       const label = stagedIds.has(e.effectId)
@@ -158,7 +165,7 @@ function renderStagedControls(controls) {
 }
 
 function openEffectDialog(effect) {
-  $("effectDialogTitle").textContent = effect ? "Effect編集" : "Effect追加";
+  $("effectDialogTitle").textContent = effect ? "Effect編集" : "新規登録";
   $("effRowId").value = effect?.id ?? "";
   $("effEffectId").value = effect?.effectId ?? 0;
   $("effName").value = effect?.name ?? "";
@@ -169,6 +176,31 @@ function openEffectDialog(effect) {
   $("effDescription").value = effect?.description ?? "";
   $("effDisplayOrder").value = effect?.displayOrder ?? 0;
   $("effectDialog").showModal();
+}
+
+async function openRelicDialog(id = null) {
+  fillEffectSlotOptions();
+  if (id == null) {
+    clearRelicEditor();
+    $("relicDialog").showModal();
+    return;
+  }
+  await loadRelicDetail(id);
+  $("relicDialog").showModal();
+}
+
+async function openBuildDialog(id = null) {
+  if (!state.relics.length) {
+    state.relics = await Api.getRelics();
+  }
+  fillBuildRelicOptions();
+  if (id == null) {
+    clearBuildEditor();
+    $("buildDialog").showModal();
+    return;
+  }
+  await loadBuildDetail(id);
+  $("buildDialog").showModal();
 }
 
 async function loadRelics() {
@@ -218,7 +250,8 @@ function clearRelicEditor() {
   $("relicId").value = "";
   $("relicForm").reset();
   for (let i = 1; i <= 3; i++) {
-    $(`relicEffect${i}`).value = "";
+    const el = $(`relicEffect${i}`);
+    if (el) el.value = "";
   }
 }
 
@@ -271,14 +304,15 @@ async function loadBuildDetail(id) {
 }
 
 function clearBuildEditor() {
-  $("buildEditorTitle").textContent = "新規保存";
+  $("buildEditorTitle").textContent = "新規登録";
   $("buildId").value = "";
   $("buildName").value = "";
   $("buildCharacter").value = "";
   $("buildWeapon").value = "";
   $("buildAttack").value = state.weaponAttack;
   for (let i = 1; i <= 6; i++) {
-    $(`buildRelic${i}`).value = "";
+    const el = $(`buildRelic${i}`);
+    if (el) el.value = "";
   }
 }
 
@@ -441,14 +475,15 @@ function wireEvents() {
     $("relicColorFilter").value = "";
     await loadRelics();
   });
+  $("btnRelicNew").addEventListener("click", () => openRelicDialog(null));
+  $("btnRelicCancel").addEventListener("click", () => $("relicDialog").close());
   $("relicTable").addEventListener("click", (event) => {
     const row = event.target.closest("tr[data-id]");
     if (!row) return;
     document.querySelectorAll("#relicTable tr").forEach((tr) => tr.classList.remove("selected"));
     row.classList.add("selected");
-    loadRelicDetail(Number(row.dataset.id));
+    openRelicDialog(Number(row.dataset.id));
   });
-  $("btnRelicClear").addEventListener("click", clearRelicEditor);
   $("btnRelicDelete").addEventListener("click", async () => {
     const id = $("relicId").value;
     if (!id) {
@@ -459,6 +494,7 @@ function wireEvents() {
     try {
       await Api.deleteRelic(Number(id));
       clearRelicEditor();
+      $("relicDialog").close();
       await loadRelics();
     } catch (error) {
       showError(error);
@@ -486,7 +522,10 @@ function wireEvents() {
         await Api.createRelic(body);
       }
       clearRelicEditor();
+      $("relicDialog").close();
+      state.relics = await Api.getRelics();
       await loadRelics();
+      fillBuildRelicOptions();
     } catch (error) {
       showError(error);
     }
@@ -497,14 +536,15 @@ function wireEvents() {
     $("buildSearch").value = "";
     loadBuilds();
   });
+  $("btnBuildNew").addEventListener("click", () => openBuildDialog(null));
+  $("btnBuildCancel").addEventListener("click", () => $("buildDialog").close());
   $("buildTable").addEventListener("click", (event) => {
     const row = event.target.closest("tr[data-id]");
     if (!row) return;
     document.querySelectorAll("#buildTable tr").forEach((tr) => tr.classList.remove("selected"));
     row.classList.add("selected");
-    loadBuildDetail(Number(row.dataset.id));
+    openBuildDialog(Number(row.dataset.id));
   });
-  $("btnBuildClear").addEventListener("click", clearBuildEditor);
   $("buildAttack").addEventListener("change", () => {
     state.weaponAttack = Number($("buildAttack").value) || 0;
     saveSession();
@@ -514,6 +554,7 @@ function wireEvents() {
     const id = $("buildId").value;
     state.selectedBuildId = id ? Number(id) : state.selectedBuildId;
     saveSession();
+    $("buildDialog").close();
     showView("calc");
   });
   $("btnBuildDelete").addEventListener("click", async () => {
@@ -530,6 +571,7 @@ function wireEvents() {
         saveSession();
       }
       clearBuildEditor();
+      $("buildDialog").close();
       await loadBuilds();
     } catch (error) {
       showError(error);
@@ -556,8 +598,8 @@ function wireEvents() {
       const savedId = result?.build?.id ?? Number(id);
       state.selectedBuildId = savedId;
       saveSession();
+      $("buildDialog").close();
       await loadBuilds();
-      await loadBuildDetail(savedId);
       alert(`保存しました。Id=${savedId}`);
     } catch (error) {
       showError(error);

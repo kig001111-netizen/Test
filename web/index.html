@@ -66,84 +66,43 @@
       </section>
 
       <section id="view-build" class="view">
-        <div class="split">
-          <div class="panel">
-            <div class="toolbar">
-              <input id="buildSearch" placeholder="ビルド名検索" />
-              <button type="button" class="btn" id="btnBuildSearch">検索</button>
-              <button type="button" class="btn" id="btnBuildReload">再読込</button>
-            </div>
-            <table>
-              <thead><tr><th>Id</th><th>名前</th><th>キャラ</th><th>武器</th></tr></thead>
-              <tbody id="buildTable"></tbody>
-            </table>
+        <div class="panel">
+          <div class="toolbar">
+            <input id="buildSearch" placeholder="ビルド名検索" />
+            <button type="button" class="btn" id="btnBuildSearch">検索</button>
+            <button type="button" class="btn" id="btnBuildReload">再読込</button>
+            <button type="button" class="btn primary" id="btnBuildNew">新規登録</button>
           </div>
-          <div class="panel">
-            <h2 id="buildEditorTitle">新規保存</h2>
-            <form id="buildForm" class="form">
-              <input type="hidden" id="buildId" />
-              <label>ビルド名 <input id="buildName" required /></label>
-              <label>キャラ名 <input id="buildCharacter" /></label>
-              <label>武器名 <input id="buildWeapon" /></label>
-              <label>武器表示火力 <input id="buildAttack" type="number" min="0" value="1000" /></label>
-              <div id="buildRelicSlots"></div>
-              <div class="actions">
-                <button type="button" class="btn" id="btnBuildClear">新規クリア</button>
-                <button type="submit" class="btn primary">保存</button>
-                <button type="button" class="btn danger" id="btnBuildDelete">削除</button>
-                <button type="button" class="btn primary" id="btnBuildToCalc">火力計算へ</button>
-              </div>
-            </form>
-          </div>
+          <p class="muted list-hint">行をタップすると編集できます</p>
+          <table>
+            <thead><tr><th>Id</th><th>名前</th><th>キャラ</th><th>武器</th></tr></thead>
+            <tbody id="buildTable"></tbody>
+          </table>
         </div>
       </section>
 
       <section id="view-relic" class="view">
-        <div class="split">
-          <div class="panel">
-            <div class="toolbar">
-              <select id="relicColorFilter">
-                <option value="">(すべて)</option>
-                <option value="0">None</option>
-                <option value="1">Red</option>
-                <option value="2">Blue</option>
-                <option value="3">Yellow</option>
-                <option value="4">Green</option>
-                <option value="5">Purple</option>
-              </select>
-              <input id="relicSearch" placeholder="名前検索" />
-              <button type="button" class="btn" id="btnRelicSearch">検索</button>
-              <button type="button" class="btn" id="btnRelicReload">再読込</button>
-            </div>
-            <table>
-              <thead><tr><th>Id</th><th>名前</th><th>色</th></tr></thead>
-              <tbody id="relicTable"></tbody>
-            </table>
+        <div class="panel">
+          <div class="toolbar">
+            <select id="relicColorFilter">
+              <option value="">(すべて)</option>
+              <option value="0">None</option>
+              <option value="1">Red</option>
+              <option value="2">Blue</option>
+              <option value="3">Yellow</option>
+              <option value="4">Green</option>
+              <option value="5">Purple</option>
+            </select>
+            <input id="relicSearch" placeholder="名前検索" />
+            <button type="button" class="btn" id="btnRelicSearch">検索</button>
+            <button type="button" class="btn" id="btnRelicReload">再読込</button>
+            <button type="button" class="btn primary" id="btnRelicNew">新規登録</button>
           </div>
-          <div class="panel">
-            <h2 id="relicEditorTitle">新規登録</h2>
-            <form id="relicForm" class="form">
-              <input type="hidden" id="relicId" />
-              <label>名前 <input id="relicName" required /></label>
-              <label>色
-                <select id="relicColor">
-                  <option value="0">None</option>
-                  <option value="1">Red</option>
-                  <option value="2">Blue</option>
-                  <option value="3">Yellow</option>
-                  <option value="4">Green</option>
-                  <option value="5">Purple</option>
-                </select>
-              </label>
-              <label>メモ <input id="relicMemo" /></label>
-              <div id="relicEffectSlots"></div>
-              <div class="actions">
-                <button type="button" class="btn" id="btnRelicClear">新規クリア</button>
-                <button type="submit" class="btn primary">登録/更新</button>
-                <button type="button" class="btn danger" id="btnRelicDelete">削除</button>
-              </div>
-            </form>
-          </div>
+          <p class="muted list-hint">行をタップすると編集できます</p>
+          <table>
+            <thead><tr><th>Id</th><th>名前</th><th>色</th></tr></thead>
+            <tbody id="relicTable"></tbody>
+          </table>
         </div>
       </section>
 
@@ -153,9 +112,10 @@
           <input id="effectSearch" placeholder="名称検索" />
           <button type="button" class="btn" id="btnEffectSearch">検索</button>
           <button type="button" class="btn" id="btnEffectReload">再読込</button>
-          <button type="button" class="btn primary" id="btnEffectNew">追加</button>
+          <button type="button" class="btn primary" id="btnEffectNew">新規登録</button>
         </div>
         <div class="panel">
+          <p class="muted list-hint">「編集」で Popup から変更できます</p>
           <table>
             <thead>
               <tr>
@@ -171,18 +131,61 @@
 
   <div id="bootStatus" class="boot-status">データベースを準備しています…</div>
 
-  <dialog id="effectDialog">
+  <dialog id="buildDialog" class="sheet">
+    <form id="buildForm" class="form">
+      <h2 id="buildEditorTitle">新規登録</h2>
+      <input type="hidden" id="buildId" />
+      <label>ビルド名 <input id="buildName" required /></label>
+      <label>キャラ名 <input id="buildCharacter" /></label>
+      <label>武器名 <input id="buildWeapon" /></label>
+      <label>武器表示火力 <input id="buildAttack" type="number" min="0" inputmode="numeric" value="1000" /></label>
+      <div id="buildRelicSlots"></div>
+      <div class="actions">
+        <button type="submit" class="btn primary">保存</button>
+        <button type="button" class="btn primary" id="btnBuildToCalc">火力計算へ</button>
+        <button type="button" class="btn danger" id="btnBuildDelete">削除</button>
+        <button type="button" class="btn" id="btnBuildCancel">キャンセル</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="relicDialog" class="sheet">
+    <form id="relicForm" class="form">
+      <h2 id="relicEditorTitle">新規登録</h2>
+      <input type="hidden" id="relicId" />
+      <label>名前 <input id="relicName" required /></label>
+      <label>色
+        <select id="relicColor">
+          <option value="0">None</option>
+          <option value="1">Red</option>
+          <option value="2">Blue</option>
+          <option value="3">Yellow</option>
+          <option value="4">Green</option>
+          <option value="5">Purple</option>
+        </select>
+      </label>
+      <label>メモ <input id="relicMemo" /></label>
+      <div id="relicEffectSlots"></div>
+      <div class="actions">
+        <button type="submit" class="btn primary">登録/更新</button>
+        <button type="button" class="btn danger" id="btnRelicDelete">削除</button>
+        <button type="button" class="btn" id="btnRelicCancel">キャンセル</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="effectDialog" class="sheet">
     <form method="dialog" id="effectForm" class="form">
       <h2 id="effectDialogTitle">Effect編集</h2>
       <input type="hidden" id="effRowId" />
-      <label>EffectId <input id="effEffectId" type="number" min="0" required /></label>
+      <label>EffectId <input id="effEffectId" type="number" min="0" inputmode="numeric" required /></label>
       <label>Name <input id="effName" required /></label>
       <label>Category <input id="effCategory" /></label>
-      <label><input id="effCanStack" type="checkbox" /> CanStack</label>
-      <label>Value <input id="effValue" type="number" step="0.001" min="0.01" required /></label>
-      <label>Level <input id="effLevel" type="number" min="1" value="1" required /></label>
+      <label class="check-label"><input id="effCanStack" type="checkbox" /> CanStack</label>
+      <label>Value <input id="effValue" type="number" step="0.001" min="0.01" inputmode="decimal" required /></label>
+      <label>Level <input id="effLevel" type="number" min="1" value="1" inputmode="numeric" required /></label>
       <label>Description <input id="effDescription" /></label>
-      <label>DisplayOrder <input id="effDisplayOrder" type="number" min="0" value="0" /></label>
+      <label>DisplayOrder <input id="effDisplayOrder" type="number" min="0" value="0" inputmode="numeric" /></label>
       <div class="actions">
         <button type="submit" class="btn primary" value="ok">OK</button>
         <button type="button" class="btn" id="btnEffectCancel">キャンセル</button>
