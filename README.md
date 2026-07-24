@@ -92,11 +92,11 @@ npx --yes serve .
 
 #### GitHub Pages で公開
 
-1. このリポジトリを GitHub に push
-2. **Settings → Pages → Build and deployment**
-3. Source: **Deploy from a branch**
-4. Branch: `main`、Folder: **`/web`**
-5. 数分後、`https://<user>.github.io/<repo>/` で開けます
+1. このリポジトリを GitHub に push（`main` への push で Actions が `web/` をデプロイ）
+2. 初回のみ **Settings → Pages → Build and deployment → Source: GitHub Actions** を選択
+3. 数分後、`https://<user>.github.io/<repo>/` でシミュレーターが開きます
+
+> リポジトリ直下を Pages にすると README / LICENSE だけが表示されます。Source は **GitHub Actions**（または Folder `/web`）にしてください。
 
 > **注意:** 遺物・ビルドは **ブラウザごと** に保存されます（PC の WinForms / ASP.NET Web の DB とは共有しません）。  
 > 別端末では別データになります。Effect マスタは初回起動時に seed から入ります。
