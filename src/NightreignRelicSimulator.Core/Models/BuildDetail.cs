@@ -62,3 +62,35 @@ public sealed class BuildRelicSlot
     /// </summary>
     public required Relic Relic { get; init; }
 }
+
+/// <summary>
+/// マトリクス形式のビルド保存リクエストです。
+/// </summary>
+/// <remarks>
+/// <see cref="EffectIdsByRelic"/> は長さ 6。各要素は Effect 行 Id の配列（0〜3件）。
+/// </remarks>
+public sealed class BuildMatrixUpsertRequest
+{
+    public int? Id { get; init; }
+    public required string Name { get; init; }
+    public required string CharacterName { get; init; }
+    public required string WeaponName { get; init; }
+
+    /// <summary>
+    /// 遺物列 1〜6 ごとの Effect 行 Id 一覧（各列最大 3）。
+    /// </summary>
+    public required IReadOnlyList<IReadOnlyList<int>> EffectIdsByRelic { get; init; }
+}
+
+/// <summary>
+/// マトリクス形式のビルド詳細です。
+/// </summary>
+public sealed class BuildMatrixDetail
+{
+    public required Build Build { get; init; }
+
+    /// <summary>
+    /// 遺物列 1〜6 ごとの Effect 行 Id 一覧（各列 0〜3件）。空列は空配列。
+    /// </summary>
+    public required IReadOnlyList<IReadOnlyList<int>> EffectIdsByRelic { get; init; }
+}

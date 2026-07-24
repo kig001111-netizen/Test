@@ -1,11 +1,10 @@
 using NightreignRelicSimulator.App.Ui;
-using NightreignRelicSimulator.Core.Constants;
 using NightreignRelicSimulator.Core.Models;
 
 namespace NightreignRelicSimulator.App.Forms;
 
 /// <summary>
-/// ビルド管理画面です。
+/// 登録済みビルドの一覧・メタ編集・計算画面への読込を行う画面です。
 /// </summary>
 public sealed class BuildManageForm : Form
 {
@@ -14,48 +13,31 @@ public sealed class BuildManageForm : Form
     private readonly TextBox _nameBox = UiFactory.CreateTextBox(220);
     private readonly TextBox _characterBox = UiFactory.CreateTextBox(180);
     private readonly TextBox _weaponBox = UiFactory.CreateTextBox(180);
-    private readonly NumericUpDown _weaponAttackBox = UiFactory.CreateNumeric(0, 999999);
-    private readonly ComboBox[] _relicBoxes = new ComboBox[AppConstants.RelicsPerBuild];
-    private readonly Label _editingLabel = UiFactory.CreateHeading("新規保存");
+    private readonly Label _editingLabel = UiFactory.CreateHeading("ビルドを選択");
     private readonly Label _countLabel = UiFactory.CreateMutedLabel("0 件");
 
     private List<Build> _allBuilds = [];
-    private List<Relic> _relics = [];
     private int? _editingBuildId;
 
     public BuildManageForm()
     {
         Text = "ビルド管理";
         UiFactory.ApplyFormChrome(this);
-
-        for (var i = 0; i < _relicBoxes.Length; i++)
-        {
-            _relicBoxes[i] = UiFactory.CreateComboBox(260);
-        }
-
-        _weaponAttackBox.Value = ClampAttack(UiSessionState.WeaponAttack);
-        _weaponAttackBox.ValueChanged += (_, _) => UiSessionState.WeaponAttack = _weaponAttackBox.Value;
         _filterNameBox.PlaceholderText = "ビルド名検索";
 
         var split = new SplitContainer
         {
             Dock = DockStyle.Fill,
             Orientation = Orientation.Vertical,
-            SplitterDistance = 420,
+            SplitterDistance = 480,
             BackColor = UiTheme.Border,
             Panel1MinSize = 280,
-            Panel2MinSize = 360
+            Panel2MinSize = 320
         };
         split.Panel1.Controls.Add(BuildListPanel());
         split.Panel2.Controls.Add(BuildEditorPanel());
-
         Controls.Add(split);
-        Shown += async (_, _) => await UiHelper.RunAsync(InitializeAsync, this);
-        FormClosing += (_, _) =>
-        {
-            UiSessionState.WeaponAttack = _weaponAttackBox.Value;
-            UiSessionState.SelectedBuildId = _editingBuildId;
-        };
+        Shown += async (_, _) => await UiHelper.RunAsync(LoadAsync, this);
     }
 
     private Panel BuildListPanel()
@@ -65,14 +47,15 @@ public sealed class BuildManageForm : Form
         toolbar.Controls.Add(_filterNameBox);
         toolbar.Controls.Add(UiFactory.CreateAsyncButton("検索", ApplyFilterAsync, this));
         toolbar.Controls.Add(UiFactory.CreateAsyncButton("再読込", LoadAsync, this));
-
         _filterNameBox.KeyDown += (_, e) =>
         {
-            if (e.KeyCode == Keys.Enter)
+            if (e.KeyCode != Keys.Enter)
             {
-                e.SuppressKeyPress = true;
-                _ = UiHelper.RunAsync(ApplyFilterAsync, this);
+                return;
             }
+
+            e.SuppressKeyPress = true;
+            _ = UiHelper.RunAsync(ApplyFilterAsync, this);
         };
 
         UiFactory.ConfigureGrid(_grid);
@@ -87,7 +70,6 @@ public sealed class BuildManageForm : Form
             BackColor = UiTheme.SurfaceAlt
         };
         footer.Controls.Add(_countLabel);
-
         panel.Controls.Add(_grid);
         panel.Controls.Add(footer);
         panel.Controls.Add(toolbar);
@@ -100,53 +82,40 @@ public sealed class BuildManageForm : Form
         {
             Dock = DockStyle.Fill,
             BackColor = UiTheme.Surface,
-            Padding = new Padding(20)
+            Padding = new Padding(16)
         };
-
         var layout = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
             AutoSize = true,
             ColumnCount = 2,
-            RowCount = 12
+            RowCount = 4
         };
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-
-        layout.Controls.Add(_editingLabel, 1, 0);
-        AddRow(layout, 1, "ビルド名", _nameBox);
-        AddRow(layout, 2, "キャラ名", _characterBox);
-        AddRow(layout, 3, "武器名", _weaponBox);
-        AddRow(layout, 4, "武器表示火力", _weaponAttackBox);
-        layout.Controls.Add(
-            UiFactory.CreateMutedLabel("※火力は未保存。計算画面へ引き継ぎます"),
-            1,
-            5);
-
-        for (var i = 0; i < _relicBoxes.Length; i++)
-        {
-            AddRow(layout, 6 + i, $"遺物{i + 1}", _relicBoxes[i]);
-        }
+        AddRow(layout, 0, "名前", _nameBox);
+        AddRow(layout, 1, "キャラ", _characterBox);
+        AddRow(layout, 2, "武器", _weaponBox);
 
         var buttons = new FlowLayoutPanel
         {
             Dock = DockStyle.Top,
-            Height = 48,
-            Padding = new Padding(0, 12, 0, 0),
-            WrapContents = false
+            AutoSize = true,
+            WrapContents = true,
+            Padding = new Padding(0, 12, 0, 0)
         };
-        buttons.Controls.Add(UiFactory.CreateAsyncButton("新規クリア", () =>
-        {
-            ClearEditor();
-            return Task.CompletedTask;
-        }, this, 110));
-        buttons.Controls.Add(UiFactory.CreateAsyncButton("選択を読込", LoadSelectedAsync, this, 110));
-        buttons.Controls.Add(UiFactory.CreateAsyncButton("保存/更新", SaveAsync, this, 110, primary: true));
+        buttons.Controls.Add(UiFactory.CreateAsyncButton("メタ保存", SaveMetaAsync, this, 110, primary: true));
+        buttons.Controls.Add(UiFactory.CreateAsyncButton("計算で開く", OpenInCalcAsync, this, 120, primary: true));
         buttons.Controls.Add(UiFactory.CreateAsyncButton("削除", DeleteAsync, this, 90));
-        buttons.Controls.Add(UiFactory.CreateAsyncButton("火力計算へ", OpenCalculatorAsync, this, 110, primary: true));
 
+        var hint = UiFactory.CreateMutedLabel("マトリクス構成は火力計算画面で編集・保存します。");
+        hint.Dock = DockStyle.Top;
+        hint.Padding = new Padding(0, 8, 0, 0);
+        _editingLabel.Dock = DockStyle.Top;
+        panel.Controls.Add(hint);
         panel.Controls.Add(buttons);
         panel.Controls.Add(layout);
+        panel.Controls.Add(_editingLabel);
         return panel;
     }
 
@@ -162,26 +131,6 @@ public sealed class BuildManageForm : Form
         layout.Controls.Add(control, 1, row);
     }
 
-    private async Task InitializeAsync()
-    {
-        _relics = (await AppServices.Relics.GetAllAsync().ConfigureAwait(true)).ToList();
-        foreach (var box in _relicBoxes)
-        {
-            var options = new List<RelicOption> { new(0, "(なし)") };
-            options.AddRange(_relics.Select(r => new RelicOption(r.Id, $"{r.Id}: {r.Name}")));
-            box.DisplayMember = nameof(RelicOption.Text);
-            box.ValueMember = nameof(RelicOption.Id);
-            box.DataSource = options.ToList();
-        }
-
-        await LoadAsync().ConfigureAwait(true);
-
-        if (UiSessionState.SelectedBuildId is int buildId)
-        {
-            await TryLoadBuildAsync(buildId).ConfigureAwait(true);
-        }
-    }
-
     private async Task LoadAsync()
     {
         _allBuilds = (await AppServices.Builds.GetAllAsync().ConfigureAwait(true)).ToList();
@@ -191,23 +140,19 @@ public sealed class BuildManageForm : Form
     private async Task ApplyFilterAsync()
     {
         var keyword = _filterNameBox.Text.Trim();
-        _allBuilds = string.IsNullOrEmpty(keyword)
+        var list = string.IsNullOrEmpty(keyword)
             ? (await AppServices.Builds.GetAllAsync().ConfigureAwait(true)).ToList()
             : (await AppServices.Builds.SearchByNameAsync(keyword).ConfigureAwait(true)).ToList();
+        _allBuilds = list.ToList();
         BindGrid(_allBuilds);
     }
 
     private void BindGrid(IReadOnlyList<Build> builds)
     {
         _grid.DataSource = null;
-        _grid.DataSource = builds.Select(b => new
-        {
-            b.Id,
-            b.Name,
-            Character = b.CharacterName,
-            Weapon = b.WeaponName,
-            Updated = b.UpdatedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm")
-        }).ToList();
+        _grid.DataSource = builds
+            .Select(b => new { b.Id, b.Name, Character = b.CharacterName, Weapon = b.WeaponName })
+            .ToList();
         _countLabel.Text = $"{builds.Count} 件";
     }
 
@@ -215,15 +160,10 @@ public sealed class BuildManageForm : Form
     {
         if (_grid.CurrentRow?.Cells["Id"]?.Value is not int id)
         {
-            UiHelper.ShowInfo(this, "読込するビルドを選択してください。");
+            UiHelper.ShowInfo(this, "ビルドを選択してください。");
             return;
         }
 
-        await TryLoadBuildAsync(id).ConfigureAwait(true);
-    }
-
-    private async Task TryLoadBuildAsync(int id)
-    {
         var detail = await AppServices.Builds.LoadAsync(id).ConfigureAwait(true);
         if (detail is null)
         {
@@ -232,129 +172,102 @@ public sealed class BuildManageForm : Form
         }
 
         _editingBuildId = detail.Build.Id;
-        UiSessionState.SelectedBuildId = detail.Build.Id;
         _editingLabel.Text = $"編集中  Id={detail.Build.Id}";
         _nameBox.Text = detail.Build.Name;
         _characterBox.Text = detail.Build.CharacterName;
         _weaponBox.Text = detail.Build.WeaponName;
-
-        for (var i = 0; i < _relicBoxes.Length; i++)
-        {
-            var position = i + 1;
-            var slot = detail.Slots.FirstOrDefault(s => s.Position == position);
-            _relicBoxes[i].SelectedValue = slot?.Relic.Id ?? 0;
-        }
     }
 
-    private async Task SaveAsync()
+    private async Task SaveMetaAsync()
     {
-        if (string.IsNullOrWhiteSpace(_nameBox.Text))
+        if (_editingBuildId is not int id)
         {
-            UiHelper.ShowInfo(this, "ビルド名は必須です。");
+            UiHelper.ShowInfo(this, "編集するビルドを選択してください。");
             return;
         }
 
-        var relicIds = new int?[AppConstants.RelicsPerBuild];
-        for (var i = 0; i < _relicBoxes.Length; i++)
+        if (string.IsNullOrWhiteSpace(_nameBox.Text))
         {
-            var selectedId = _relicBoxes[i].SelectedValue is int id ? id : 0;
-            relicIds[i] = selectedId > 0 ? selectedId : null;
+            UiHelper.ShowInfo(this, "名前は必須です。");
+            return;
         }
 
-        var request = new BuildUpsertRequest
+        var matrix = await AppServices.BuildMatrix.LoadAsync(id).ConfigureAwait(true);
+        if (matrix is null)
         {
-            Id = _editingBuildId,
-            Name = _nameBox.Text.Trim(),
-            CharacterName = _characterBox.Text.Trim(),
-            WeaponName = _weaponBox.Text.Trim(),
-            RelicIdsByPosition = relicIds
-        };
+            UiHelper.ShowInfo(this, "ビルドが見つかりません。");
+            return;
+        }
 
-        var savedId = await AppServices.Builds.SaveAsync(request).ConfigureAwait(true);
-        _editingBuildId = savedId;
-        UiSessionState.SelectedBuildId = savedId;
-        UiSessionState.WeaponAttack = _weaponAttackBox.Value;
-        _editingLabel.Text = $"編集中  Id={savedId}";
+        await AppServices.BuildMatrix.SaveAsync(
+            new BuildMatrixUpsertRequest
+            {
+                Id = id,
+                Name = _nameBox.Text.Trim(),
+                CharacterName = _characterBox.Text.Trim(),
+                WeaponName = _weaponBox.Text.Trim(),
+                EffectIdsByRelic = matrix.EffectIdsByRelic
+            }).ConfigureAwait(true);
+
         await LoadAsync().ConfigureAwait(true);
-        UiHelper.ShowInfo(this, $"保存しました。Id={savedId}");
+        UiHelper.ShowInfo(this, "保存しました。");
+    }
+
+    private Task OpenInCalcAsync()
+    {
+        var buildId = ResolveSelectedBuildId();
+        if (buildId is null)
+        {
+            UiHelper.ShowInfo(this, "ビルドを選択してください。");
+            return Task.CompletedTask;
+        }
+
+        UiSessionState.SelectedBuildId = buildId;
+        var main = Application.OpenForms.OfType<MainForm>().FirstOrDefault();
+        main?.OpenDamageCalculatorWithBuild(buildId.Value);
+        return Task.CompletedTask;
     }
 
     private async Task DeleteAsync()
     {
-        if (_grid.CurrentRow?.Cells["Id"]?.Value is not int id)
+        var buildId = ResolveSelectedBuildId();
+        if (buildId is null)
         {
             UiHelper.ShowInfo(this, "削除するビルドを選択してください。");
             return;
         }
 
-        if (!UiHelper.Confirm(this, $"ビルド Id={id} を削除しますか？"))
+        if (!UiHelper.Confirm(this, $"ビルド Id={buildId} を削除しますか？"))
         {
             return;
         }
 
-        await AppServices.Builds.DeleteAsync(id).ConfigureAwait(true);
-        if (UiSessionState.SelectedBuildId == id)
+        await AppServices.Builds.DeleteAsync(buildId.Value).ConfigureAwait(true);
+        if (UiSessionState.SelectedBuildId == buildId)
         {
             UiSessionState.SelectedBuildId = null;
         }
 
-        ClearEditor();
-        await LoadAsync().ConfigureAwait(true);
-    }
-
-    private Task OpenCalculatorAsync()
-    {
-        UiSessionState.WeaponAttack = _weaponAttackBox.Value;
-        UiSessionState.SelectedBuildId = _editingBuildId;
-
-        if (FindForm() is MainForm main)
-        {
-            main.OpenDamageCalculator();
-            return Task.CompletedTask;
-        }
-
-        using var form = new DamageCalculatorForm { StartPosition = FormStartPosition.CenterParent };
-        form.ShowDialog(FindForm());
-        _weaponAttackBox.Value = ClampAttack(UiSessionState.WeaponAttack);
-        return Task.CompletedTask;
-    }
-
-    private void ClearEditor()
-    {
         _editingBuildId = null;
-        _editingLabel.Text = "新規保存";
+        _editingLabel.Text = "ビルドを選択";
         _nameBox.Clear();
         _characterBox.Clear();
         _weaponBox.Clear();
-        _weaponAttackBox.Value = ClampAttack(UiSessionState.WeaponAttack);
-        foreach (var box in _relicBoxes)
-        {
-            if (box.Items.Count > 0)
-            {
-                box.SelectedIndex = 0;
-            }
-        }
+        await LoadAsync().ConfigureAwait(true);
     }
 
-    private static decimal ClampAttack(decimal value)
+    private int? ResolveSelectedBuildId()
     {
-        if (value < 0m)
+        if (_editingBuildId is int id)
         {
-            return 0m;
+            return id;
         }
 
-        return value > 999999m ? 999999m : value;
-    }
-
-    private sealed class RelicOption
-    {
-        public RelicOption(int id, string text)
+        if (_grid.CurrentRow?.Cells["Id"]?.Value is int gridId)
         {
-            Id = id;
-            Text = text;
+            return gridId;
         }
 
-        public int Id { get; }
-        public string Text { get; }
+        return null;
     }
 }

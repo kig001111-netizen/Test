@@ -99,5 +99,23 @@ const Api = {
 
   calculate(body) {
     return this.request("/api/calculate", { method: "POST", body: JSON.stringify(body) });
+  },
+
+  loadBuildMatrix(id) {
+    return this.request(`/api/builds/${id}/matrix`);
+  },
+
+  saveBuildMatrix(body) {
+    if (body.id) {
+      return this.request(`/api/builds/${body.id}/matrix`, {
+        method: "PUT",
+        body: JSON.stringify(body)
+      }).then(async () => this.loadBuildMatrix(body.id));
+    }
+    return this.request("/api/builds/matrix", { method: "POST", body: JSON.stringify(body) });
+  },
+
+  calculateMatrix(body) {
+    return this.request("/api/calculate/matrix", { method: "POST", body: JSON.stringify(body) });
   }
 };

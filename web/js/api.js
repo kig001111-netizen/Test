@@ -282,6 +282,126 @@ const Api = (() => {
     return { ...result, stagedControls };
   }
 
+  async function loadBuildMatrix(buildId) {
+    const detail = await getBuild(buildId);
+    if (!detail) return null;
+    const catalog = allEffects();
+    const collapsed = Calc.collapseForRelicSelection(catalog);
+    const byEffectId = new Map(collapsed.map((e) => [e.effectId, e.id]));
+
+    const effectIdsByRelic = [[], [], [], [], [], []];
+    for (let position = 1; position <= 6; position++) {
+      const slot = detail.slots.find((s) => s.position === position);
+      if (!slot) continue;
+      const relic = await getRelic(slot.relic.id);
+      if (!relic) continue;
+      effectIdsByRelic[position - 1] = relic.slots
+        .slice()
+        .sort((a, b) => a.slotNumber - b.slotNumber)
+        .map((s) => byEffectId.get(s.effect.effectId) ?? s.effect.id)
+        .slice(0, 3);
+    }
+
+    return { build: detail.build, effectIdsByRelic };
+  }
+
+  async function saveBuildMatrix(body) {
+    const name = (body.name || "").trim();
+    if (!name) throw new Error("ビルド名は必須です。");
+    const columns = body.effectIdsByRelic || [];
+    if (columns.length !== 6) throw new Error("遺物列は6件で指定してください。");
+
+    let previousByPos = {};
+    let previousIds = [];
+    if (body.id) {
+      const prev = await getBuild(body.id);
+      if (!prev) throw new Error("ビルドが見つかりません。");
+      prev.slots.forEach((s) => {
+        previousByPos[s.position] = s.relic.id;
+        previousIds.push(s.relic.id);
+      });
+    }
+
+    const relicIdsByPosition = [null, null, null, null, null, null];
+    const used = new Set();
+
+    for (let i = 0; i < 6; i++) {
+      const ids = (columns[i] || []).filter((x) => x != null).slice(0, 3);
+      if (!ids.length) continue;
+      const slots = [ids[0] ?? null, ids[1] ?? null, ids[2] ?? null];
+      const position = i + 1;
+      const payload = {
+        name: `${name} #${position}`,
+        color: 0,
+        memo: "matrix",
+        effectIdsBySlot: slots
+      };
+      if (previousByPos[position]) {
+        await updateRelic(previousByPos[position], { ...payload, id: previousByPos[position] });
+        relicIdsByPosition[i] = previousByPos[position];
+        used.add(previousByPos[position]);
+      } else {
+        const created = await createRelic(payload);
+        relicIdsByPosition[i] = created.relic.id;
+        used.add(created.relic.id);
+      }
+    }
+
+    const saved = await saveBuild({
+      id: body.id || null,
+      name,
+      characterName: body.characterName || "",
+      weaponName: body.weaponName || "",
+      relicIdsByPosition
+    });
+
+    for (const oldId of previousIds) {
+      if (used.has(oldId)) continue;
+      try {
+        await deleteRelic(oldId);
+      } catch {
+        /* ignore */
+      }
+    }
+
+    return loadBuildMatrix(saved.build.id);
+  }
+
+  async function calculateMatrix(body) {
+    const catalog = allEffects();
+    const byId = new Map(catalog.map((e) => [e.id, e]));
+    const effects = [];
+    (body.effectIdsByRelic || []).forEach((column) => {
+      (column || []).forEach((id) => {
+        const effect = byId.get(Number(id));
+        if (effect) effects.push(effect);
+      });
+    });
+
+    const result = Calc.calculate({
+      weaponAttack: Number(body.weaponAttack) || 0,
+      effects,
+      catalog,
+      levelOverrides: body.levelOverrides || {}
+    });
+
+    const stagedControls = Calc.getStagedDefinitions(catalog)
+      .filter((d) => effects.some((e) => e.effectId === d.effectId))
+      .map((d) => {
+        const selected = body.levelOverrides && body.levelOverrides[d.effectId] != null
+          ? Number(body.levelOverrides[d.effectId])
+          : effects.find((e) => e.effectId === d.effectId).level;
+        return {
+          effectId: d.effectId,
+          name: d.name,
+          selectedLevel: selected,
+          levels: d.levels
+        };
+      });
+
+    return { ...result, stagedControls };
+  }
+
   return {
     getEffects,
     getStagedEffects,
@@ -297,6 +417,9 @@ const Api = (() => {
     getBuild,
     saveBuild,
     deleteBuild,
-    calculate
+    calculate,
+    loadBuildMatrix,
+    saveBuildMatrix,
+    calculateMatrix
   };
 })();

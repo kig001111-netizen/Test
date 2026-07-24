@@ -13,6 +13,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<IEffectService, EffectService>();
 builder.Services.AddSingleton<IRelicService, RelicService>();
 builder.Services.AddSingleton<IBuildService, BuildService>();
+builder.Services.AddSingleton<IBuildMatrixService, BuildMatrixService>();
 builder.Services.AddSingleton<DamageCalculator>();
 
 var app = builder.Build();
@@ -196,6 +197,90 @@ api.MapDelete("/builds/{id:int}", async (int id, IBuildService builds, Cancellat
     return Results.NoContent();
 });
 
+api.MapGet("/builds/{id:int}/matrix", async (int id, IBuildMatrixService matrix, CancellationToken ct) =>
+{
+    var detail = await matrix.LoadAsync(id, ct);
+    return detail is null ? Results.NotFound() : Results.Ok(detail);
+});
+
+api.MapPost("/builds/matrix", async (BuildMatrixUpsertRequest body, IBuildMatrixService matrix, CancellationToken ct) =>
+{
+    var id = await matrix.SaveAsync(body, ct);
+    var detail = await matrix.LoadAsync(id, ct);
+    return Results.Created($"/api/builds/{id}/matrix", detail);
+});
+
+api.MapPut("/builds/{id:int}/matrix", async (int id, BuildMatrixUpsertRequest body, IBuildMatrixService matrix, CancellationToken ct) =>
+{
+    var request = new BuildMatrixUpsertRequest
+    {
+        Id = id,
+        Name = body.Name,
+        CharacterName = body.CharacterName,
+        WeaponName = body.WeaponName,
+        EffectIdsByRelic = body.EffectIdsByRelic
+    };
+    await matrix.SaveAsync(request, ct);
+    return Results.NoContent();
+});
+
+api.MapPost("/calculate/matrix", async (
+    CalculateMatrixRequest body,
+    IEffectService effectService,
+    DamageCalculator calculator,
+    CancellationToken ct) =>
+{
+    var catalog = await effectService.GetAllAsync(ct);
+    var byId = catalog.ToDictionary(e => e.Id);
+    var effects = new List<Effect>();
+    foreach (var column in body.EffectIdsByRelic ?? Array.Empty<IReadOnlyList<int>>())
+    {
+        foreach (var effectRowId in column)
+        {
+            if (byId.TryGetValue(effectRowId, out var effect))
+            {
+                effects.Add(effect);
+            }
+        }
+    }
+
+    var levelOverrides = body.LevelOverrides?.ToDictionary(kv => kv.Key, kv => kv.Value);
+    var result = calculator.Calculate(new DamageCalculationRequest
+    {
+        WeaponAttack = body.WeaponAttack,
+        Effects = effects,
+        EffectCatalog = catalog,
+        LevelOverrides = levelOverrides
+    });
+
+    var stagedInBuild = StagedEffectResolver.GetDefinitions(catalog)
+        .Where(d => effects.Any(e => e.EffectId == d.EffectId))
+        .Select(d =>
+        {
+            var selected = levelOverrides is not null && levelOverrides.TryGetValue(d.EffectId, out var lv)
+                ? lv
+                : effects.First(e => e.EffectId == d.EffectId).Level;
+            return new
+            {
+                d.EffectId,
+                d.Name,
+                SelectedLevel = selected,
+                d.Levels
+            };
+        });
+
+    return Results.Ok(new
+    {
+        result.BaseAttack,
+        result.TotalMultiplier,
+        result.FinalAttack,
+        result.AppliedEffects,
+        result.IgnoredEffects,
+        result.Logs,
+        StagedControls = stagedInBuild
+    });
+});
+
 api.MapPost("/calculate", async (
     CalculateRequest body,
     IEffectService effectService,
@@ -272,5 +357,12 @@ internal sealed class CalculateRequest
 {
     public int BuildId { get; init; }
     public decimal WeaponAttack { get; init; }
+    public Dictionary<int, int>? LevelOverrides { get; init; }
+}
+
+internal sealed class CalculateMatrixRequest
+{
+    public decimal WeaponAttack { get; init; }
+    public IReadOnlyList<IReadOnlyList<int>>? EffectIdsByRelic { get; init; }
     public Dictionary<int, int>? LevelOverrides { get; init; }
 }

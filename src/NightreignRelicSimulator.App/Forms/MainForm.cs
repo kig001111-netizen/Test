@@ -47,6 +47,15 @@ public sealed class MainForm : Form
     public void OpenDamageCalculator() =>
         Navigate("calc", "火力計算", () => new DamageCalculatorForm());
 
+    /// <summary>
+    /// 指定ビルドを読み込んだ火力計算画面を開きます。
+    /// </summary>
+    public void OpenDamageCalculatorWithBuild(int buildId)
+    {
+        UiSessionState.SelectedBuildId = buildId;
+        Navigate("calc", "火力計算", () => new DamageCalculatorForm(), force: true);
+    }
+
     private Panel BuildNavPanel()
     {
         var nav = new Panel
@@ -93,7 +102,6 @@ public sealed class MainForm : Form
 
         buttons.Controls.Add(CreateNav("calc", "火力計算", () => new DamageCalculatorForm()));
         buttons.Controls.Add(CreateNav("build", "ビルド管理", () => new BuildManageForm()));
-        buttons.Controls.Add(CreateNav("relic", "遺物管理", () => new RelicManageForm()));
         buttons.Controls.Add(CreateNav("effect", "Effect管理", () => new EffectManageForm()));
 
         var footer = new Panel
@@ -158,9 +166,9 @@ public sealed class MainForm : Form
         return button;
     }
 
-    private void Navigate(string key, string title, Func<Form> factory)
+    private void Navigate(string key, string title, Func<Form> factory, bool force = false)
     {
-        if (_currentKey == key && _currentChild is { IsDisposed: false })
+        if (!force && _currentKey == key && _currentChild is { IsDisposed: false })
         {
             RefreshSessionLabel();
             return;

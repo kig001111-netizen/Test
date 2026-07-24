@@ -1,12 +1,15 @@
+const RELIC_COLS = 6;
+const MAX_PER_COL = 3;
+
 const state = {
   weaponAttack: Number(localStorage.getItem("weaponAttack") || 1000),
   selectedBuildId: localStorage.getItem("selectedBuildId")
     ? Number(localStorage.getItem("selectedBuildId"))
     : null,
   effects: [],
-  relicEffects: [],
-  relics: [],
+  matrixEffects: [],
   builds: [],
+  columns: Array.from({ length: RELIC_COLS }, () => []),
   levelOverrides: loadLevelOverrides()
 };
 
@@ -22,11 +25,9 @@ function persistLevelOverrides() {
   localStorage.setItem("levelOverrides", JSON.stringify(state.levelOverrides));
 }
 
-const colors = ["None", "Red", "Blue", "Yellow", "Green", "Purple"];
 const titles = {
   calc: "火力計算",
   build: "ビルド管理",
-  relic: "遺物管理",
   effect: "Effect管理"
 };
 
@@ -41,9 +42,11 @@ function saveSession() {
   } else {
     localStorage.setItem("selectedBuildId", String(state.selectedBuildId));
   }
-
-  const buildText = state.selectedBuildId == null ? "Build未選択" : `Build #${state.selectedBuildId}`;
+  const buildText = state.selectedBuildId == null ? "新規" : `Build #${state.selectedBuildId}`;
   $("sessionInfo").textContent = `火力 ${state.weaponAttack}\n${buildText}`;
+  if ($("calcBuildHint")) {
+    $("calcBuildHint").textContent = `編集中: ${buildText}（チェックすると即計算）`;
+  }
 }
 
 function showError(error) {
@@ -58,74 +61,65 @@ function showView(name) {
   $("viewTitle").textContent = titles[name] || name;
 
   if (name === "calc") {
-    loadCalcBuilds();
+    renderMatrix();
+    recalculate();
   } else if (name === "build") {
     loadBuilds();
-  } else if (name === "relic") {
-    loadRelics();
   } else if (name === "effect") {
     loadEffects();
   }
 }
 
-async function loadEffects(params = {}) {
-  try {
-    state.effects = await Api.getEffects(params);
-    const categories = ["(すべて)", ...new Set(state.effects.map((e) => e.category).filter(Boolean))];
-    const select = $("effectCategory");
-    const current = select.value;
-    select.innerHTML = categories.map((c) => `<option value="${c === "(すべて)" ? "" : c}">${c}</option>`).join("");
-    if (categories.includes(current) || current === "") {
-      select.value = current;
-    }
-
-    const category = select.value;
-    const rows = category
-      ? state.effects.filter((e) => e.category === category)
-      : state.effects;
-
-    $("effectTable").innerHTML = rows.map((e) => `
-      <tr data-id="${e.id}">
-        <td>${e.effectId}</td>
-        <td>${escapeHtml(e.name)}</td>
-        <td>${escapeHtml(e.category)}</td>
-        <td>${e.canStack}</td>
-        <td>${e.value}</td>
-        <td>${e.level}</td>
-        <td>
-          <button type="button" class="btn" data-edit="${e.id}">編集</button>
-          <button type="button" class="btn danger" data-del="${e.id}">削除</button>
-        </td>
-      </tr>`).join("");
-
-    fillEffectSlotOptions();
-  } catch (error) {
-    showError(error);
-  }
+function columnCount(colIndex) {
+  return state.columns[colIndex].length;
 }
 
-function fillEffectSlotOptions() {
-  const source = (state.relicEffects.length
-    ? state.relicEffects
-    : Calc.collapseForRelicSelection(state.effects));
-  const stagedIds = new Set(
-    (state.stagedDefs && state.stagedDefs.length
-      ? state.stagedDefs
-      : Calc.getStagedDefinitions(state.effects)
-    ).map((d) => d.effectId)
-  );
-  const options = [`<option value="">(なし)</option>`]
-    .concat(source.map((e) => {
-      const label = stagedIds.has(e.effectId)
-        ? `${e.effectId}: ${escapeHtml(e.name)}（段階・計算でLv指定）`
-        : `${e.effectId}: ${escapeHtml(e.name)}`;
-      return `<option value="${e.id}">${label}</option>`;
-    }));
-  const html = options.join("");
-  document.querySelectorAll("#relicEffectSlots select").forEach((el) => {
-    const value = el.value;
-    el.innerHTML = html;
-    el.value = value;
+function isChecked(effectRowId, colIndex) {
+  return state.columns[colIndex].includes(effectRowId);
+}
+
+function toggleCell(effectRowId, colIndex, checked) {
+  const col = state.columns[colIndex];
+  const idx = col.indexOf(effectRowId);
+  if (checked) {
+    if (idx >= 0) return true;
+    if (col.length >= MAX_PER_COL) {
+      alert(`遺物${colIndex + 1} に設定できる効果は最大 ${MAX_PER_COL} 件です。`);
+      return false;
+    }
+    col.push(effectRowId);
+  } else if (idx >= 0) {
+    col.splice(idx, 1);
+  }
+  return true;
+}
+
+function renderMatrix() {
+  const body = $("matrixBody");
+  if (!body) return;
+  const stagedIds = new Set((state.stagedDefs || []).map((d) => d.effectId));
+  body.innerHTML = state.matrixEffects.map((e) => {
+    const label = stagedIds.has(e.effectId)
+      ? `${e.effectId}: ${escapeHtml(e.name)}（段階）`
+      : `${e.effectId}: ${escapeHtml(e.name)}`;
+    const cells = Array.from({ length: RELIC_COLS }, (_, col) => {
+      const on = isChecked(e.id, col);
+      return `<td class="matrix-check"><input type="checkbox" data-effect-id="${e.id}" data-col="${col}" ${on ? "checked" : ""} /></td>`;
+    }).join("");
+    return `<tr><th class="matrix-sticky">${label}</th>${cells}</tr>`;
+  }).join("");
+
+  body.querySelectorAll("input[type=checkbox]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const effectId = Number(input.dataset.effectId);
+      const col = Number(input.dataset.col);
+      const ok = toggleCell(effectId, col, input.checked);
+      if (!ok) {
+        input.checked = false;
+        return;
+      }
+      recalculate();
+    });
   });
 }
 
@@ -148,7 +142,7 @@ function renderStagedControls(controls) {
       <div class="staged-item">
         <div>
           <strong>${escapeHtml(c.name)}</strong>
-          <div class="value-hint">EffectId=${c.effectId} / 同一効果は1件のみ適用</div>
+          <div class="value-hint">EffectId=${c.effectId}</div>
         </div>
         <select data-effect-id="${c.effectId}">${options}</select>
       </div>`;
@@ -156,12 +150,122 @@ function renderStagedControls(controls) {
 
   host.querySelectorAll("select[data-effect-id]").forEach((select) => {
     select.addEventListener("change", () => {
-      const effectId = Number(select.dataset.effectId);
-      state.levelOverrides[effectId] = Number(select.value);
+      state.levelOverrides[Number(select.dataset.effectId)] = Number(select.value);
       persistLevelOverrides();
-      calculate();
+      recalculate();
     });
   });
+}
+
+async function recalculate() {
+  try {
+    state.weaponAttack = Number($("calcAttack").value) || 0;
+    saveSession();
+    const levelOverrides = {};
+    Object.entries(state.levelOverrides).forEach(([k, v]) => {
+      levelOverrides[Number(k)] = Number(v);
+    });
+    const result = await Api.calculateMatrix({
+      weaponAttack: state.weaponAttack,
+      effectIdsByRelic: state.columns.map((c) => c.slice()),
+      levelOverrides
+    });
+
+    $("resBase").textContent = formatNum(result.baseAttack);
+    $("resMult").textContent = `× ${formatNum(result.totalMultiplier)}`;
+    $("resFinal").textContent = formatNum(result.finalAttack);
+    $("resCount").textContent =
+      `適用 ${result.appliedEffects.length} / 無効 ${result.ignoredEffects.length}`;
+    renderStagedControls(result.stagedControls);
+    $("appliedList").innerHTML = result.appliedEffects
+      .map((e) => `<li>[${escapeHtml(e.category)}] EffectId=${e.effectId} Lv${e.level} ${escapeHtml(e.name)} ×${e.value}</li>`)
+      .join("");
+    $("ignoredList").innerHTML = result.ignoredEffects
+      .map((e) => `<li>[${escapeHtml(e.category)}] EffectId=${e.effectId} Lv${e.level} ${escapeHtml(e.name)} ×${e.value}</li>`)
+      .join("");
+    $("calcLog").textContent = (result.logs || [])
+      .map((l) => `[${l.step}] ${l.description}${l.multiplier == null ? "" : ` (×${l.multiplier})`} → ${formatNum(l.currentAttack)}`)
+      .join("\n");
+  } catch (error) {
+    showError(error);
+  }
+}
+
+function clearMatrix() {
+  state.columns = Array.from({ length: RELIC_COLS }, () => []);
+  state.selectedBuildId = null;
+  $("calcBuildName").value = "";
+  $("calcCharacter").value = "";
+  $("calcWeapon").value = "";
+  saveSession();
+  renderMatrix();
+  recalculate();
+}
+
+async function loadMatrixFromBuild(buildId) {
+  const detail = await Api.loadBuildMatrix(buildId);
+  if (!detail) {
+    throw new Error("ビルドが見つかりません。");
+  }
+  state.selectedBuildId = detail.build.id;
+  state.columns = Array.from({ length: RELIC_COLS }, (_, i) => (detail.effectIdsByRelic[i] || []).slice());
+  $("calcBuildName").value = detail.build.name || "";
+  $("calcCharacter").value = detail.build.characterName || "";
+  $("calcWeapon").value = detail.build.weaponName || "";
+  saveSession();
+  renderMatrix();
+  await recalculate();
+}
+
+async function saveCurrentBuild() {
+  const name = $("calcBuildName").value.trim();
+  if (!name) {
+    alert("ビルド名を入力してください。");
+    return;
+  }
+  try {
+    const saved = await Api.saveBuildMatrix({
+      id: state.selectedBuildId,
+      name,
+      characterName: $("calcCharacter").value.trim(),
+      weaponName: $("calcWeapon").value.trim(),
+      effectIdsByRelic: state.columns.map((c) => c.slice())
+    });
+    state.selectedBuildId = saved.build.id;
+    saveSession();
+    alert(`保存しました。Id=${saved.build.id}`);
+  } catch (error) {
+    showError(error);
+  }
+}
+
+async function loadEffects(params = {}) {
+  try {
+    state.effects = await Api.getEffects(params);
+    const categories = ["(すべて)", ...new Set(state.effects.map((e) => e.category).filter(Boolean))];
+    const select = $("effectCategory");
+    const current = select.value;
+    select.innerHTML = categories.map((c) => `<option value="${c === "(すべて)" ? "" : c}">${c}</option>`).join("");
+    if (categories.includes(current) || current === "") select.value = current;
+
+    const category = select.value;
+    const rows = category ? state.effects.filter((e) => e.category === category) : state.effects;
+    $("effectTable").innerHTML = rows.map((e) => `
+      <tr data-id="${e.id}">
+        <td>${e.effectId}</td>
+        <td>${escapeHtml(e.name)}</td>
+        <td>${escapeHtml(e.category)}</td>
+        <td>${e.canStack}</td>
+        <td>${e.value}</td>
+        <td>${e.level}</td>
+        <td>
+          <button type="button" class="btn" data-edit="${e.id}">編集</button>
+          <button type="button" class="btn danger" data-del="${e.id}">削除</button>
+        </td>
+      </tr>`).join("");
+  } catch (error) {
+    showError(error);
+  }
 }
 
 function openEffectDialog(effect) {
@@ -178,83 +282,6 @@ function openEffectDialog(effect) {
   $("effectDialog").showModal();
 }
 
-async function openRelicDialog(id = null) {
-  fillEffectSlotOptions();
-  if (id == null) {
-    clearRelicEditor();
-    $("relicDialog").showModal();
-    return;
-  }
-  await loadRelicDetail(id);
-  $("relicDialog").showModal();
-}
-
-async function openBuildDialog(id = null) {
-  if (!state.relics.length) {
-    state.relics = await Api.getRelics();
-  }
-  fillBuildRelicOptions();
-  if (id == null) {
-    clearBuildEditor();
-    $("buildDialog").showModal();
-    return;
-  }
-  await loadBuildDetail(id);
-  $("buildDialog").showModal();
-}
-
-async function loadRelics() {
-  try {
-    const q = $("relicSearch").value.trim();
-    const color = $("relicColorFilter").value;
-    const params = {};
-    if (q) params.q = q;
-    else if (color !== "") params.color = color;
-    state.relics = await Api.getRelics(params);
-    $("relicTable").innerHTML = state.relics.map((r) => `
-      <tr data-id="${r.id}">
-        <td>${r.id}</td>
-        <td>${escapeHtml(r.name)}</td>
-        <td>${colors[r.color] ?? r.color}</td>
-      </tr>`).join("");
-  } catch (error) {
-    showError(error);
-  }
-}
-
-async function loadRelicDetail(id) {
-  try {
-    const detail = await Api.getRelic(id);
-    $("relicEditorTitle").textContent = `編集中 Id=${detail.relic.id}`;
-    $("relicId").value = detail.relic.id;
-    $("relicName").value = detail.relic.name;
-    $("relicColor").value = detail.relic.color;
-    $("relicMemo").value = detail.relic.memo ?? "";
-    for (let i = 1; i <= 3; i++) {
-      const slot = detail.slots.find((s) => s.slotNumber === i);
-      if (!slot) {
-        $(`relicEffect${i}`).value = "";
-        continue;
-      }
-
-      const collapsed = state.relicEffects.find((e) => e.effectId === slot.effect.effectId);
-      $(`relicEffect${i}`).value = collapsed ? String(collapsed.id) : String(slot.effect.id);
-    }
-  } catch (error) {
-    showError(error);
-  }
-}
-
-function clearRelicEditor() {
-  $("relicEditorTitle").textContent = "新規登録";
-  $("relicId").value = "";
-  $("relicForm").reset();
-  for (let i = 1; i <= 3; i++) {
-    const el = $(`relicEffect${i}`);
-    if (el) el.value = "";
-  }
-}
-
 async function loadBuilds(q = "") {
   try {
     state.builds = await Api.getBuilds(q ? { q } : {});
@@ -264,119 +291,25 @@ async function loadBuilds(q = "") {
         <td>${escapeHtml(b.name)}</td>
         <td>${escapeHtml(b.characterName)}</td>
         <td>${escapeHtml(b.weaponName)}</td>
+        <td><button type="button" class="btn primary" data-open-calc="${b.id}">計算で開く</button></td>
       </tr>`).join("");
-    fillBuildRelicOptions();
   } catch (error) {
     showError(error);
   }
 }
 
-function fillBuildRelicOptions() {
-  const options = [`<option value="">(なし)</option>`]
-    .concat(state.relics.map((r) => `<option value="${r.id}">${r.id}: ${escapeHtml(r.name)}</option>`));
-  const html = options.join("");
-  document.querySelectorAll("#buildRelicSlots select").forEach((el) => {
-    const value = el.value;
-    el.innerHTML = html;
-    el.value = value;
-  });
-}
-
-async function loadBuildDetail(id) {
-  try {
-    const detail = await Api.getBuild(id);
-    $("buildEditorTitle").textContent = `編集中 Id=${detail.build.id}`;
-    $("buildId").value = detail.build.id;
-    $("buildName").value = detail.build.name;
-    $("buildCharacter").value = detail.build.characterName;
-    $("buildWeapon").value = detail.build.weaponName;
-    $("buildAttack").value = state.weaponAttack;
-    state.selectedBuildId = detail.build.id;
-    saveSession();
-
-    for (let i = 1; i <= 6; i++) {
-      const slot = detail.slots.find((s) => s.position === i);
-      $(`buildRelic${i}`).value = slot ? String(slot.relic.id) : "";
-    }
-  } catch (error) {
-    showError(error);
+async function openBuildMeta(id) {
+  const detail = await Api.getBuild(id);
+  if (!detail) {
+    alert("ビルドが見つかりません。");
+    return;
   }
-}
-
-function clearBuildEditor() {
-  $("buildEditorTitle").textContent = "新規登録";
-  $("buildId").value = "";
-  $("buildName").value = "";
-  $("buildCharacter").value = "";
-  $("buildWeapon").value = "";
-  $("buildAttack").value = state.weaponAttack;
-  for (let i = 1; i <= 6; i++) {
-    const el = $(`buildRelic${i}`);
-    if (el) el.value = "";
-  }
-}
-
-async function loadCalcBuilds() {
-  try {
-    if (!state.relics.length) {
-      state.relics = await Api.getRelics();
-    }
-
-    state.builds = await Api.getBuilds();
-    $("calcBuild").innerHTML = state.builds
-      .map((b) => `<option value="${b.id}">${b.id}: ${escapeHtml(b.name)}</option>`)
-      .join("");
-    $("calcAttack").value = state.weaponAttack;
-    if (state.selectedBuildId) {
-      $("calcBuild").value = String(state.selectedBuildId);
-    }
-    if ($("calcBuild").value) {
-      await calculate();
-    }
-  } catch (error) {
-    showError(error);
-  }
-}
-
-async function calculate() {
-  try {
-    const buildId = Number($("calcBuild").value);
-    const weaponAttack = Number($("calcAttack").value);
-    if (!buildId) {
-      alert("ビルドを選択してください。");
-      return;
-    }
-
-    state.weaponAttack = weaponAttack;
-    state.selectedBuildId = buildId;
-    saveSession();
-
-    const levelOverrides = {};
-    Object.entries(state.levelOverrides).forEach(([key, value]) => {
-      levelOverrides[Number(key)] = Number(value);
-    });
-
-    const result = await Api.calculate({ buildId, weaponAttack, levelOverrides });
-    $("resBase").textContent = formatNum(result.baseAttack);
-    $("resMult").textContent = `× ${formatNum(result.totalMultiplier)}`;
-    $("resFinal").textContent = formatNum(result.finalAttack);
-    $("resCount").textContent =
-      `適用 ${result.appliedEffects.length} / 無効 ${result.ignoredEffects.length}`;
-
-    renderStagedControls(result.stagedControls);
-
-    $("appliedList").innerHTML = result.appliedEffects
-      .map((e) => `<li>[${escapeHtml(e.category)}] EffectId=${e.effectId} Lv${e.level} ${escapeHtml(e.name)} ×${e.value}</li>`)
-      .join("");
-    $("ignoredList").innerHTML = result.ignoredEffects
-      .map((e) => `<li>[${escapeHtml(e.category)}] EffectId=${e.effectId} Lv${e.level} ${escapeHtml(e.name)} ×${e.value}</li>`)
-      .join("");
-    $("calcLog").textContent = (result.logs || [])
-      .map((l) => `[${l.step}] ${l.description}${l.multiplier == null ? "" : ` (×${l.multiplier})`} → ${formatNum(l.currentAttack)}`)
-      .join("\n");
-  } catch (error) {
-    showError(error);
-  }
+  $("buildEditorTitle").textContent = `編集 Id=${detail.build.id}`;
+  $("buildId").value = detail.build.id;
+  $("buildName").value = detail.build.name;
+  $("buildCharacter").value = detail.build.characterName;
+  $("buildWeapon").value = detail.build.weaponName;
+  $("buildDialog").showModal();
 }
 
 function formatNum(value) {
@@ -391,29 +324,17 @@ function escapeHtml(text) {
     .replaceAll('"', "&quot;");
 }
 
-function buildSlotEditors() {
-  $("relicEffectSlots").innerHTML = [1, 2, 3].map((i) =>
-    `<label>Effect${i} <select id="relicEffect${i}"></select></label>`).join("");
-  $("buildRelicSlots").innerHTML = [1, 2, 3, 4, 5, 6].map((i) =>
-    `<label>遺物${i} <select id="buildRelic${i}"></select></label>`).join("");
-}
-
 function wireEvents() {
   document.querySelectorAll(".nav-btn").forEach((btn) => {
     btn.addEventListener("click", () => showView(btn.dataset.view));
   });
 
-  $("btnCalculate").addEventListener("click", calculate);
-  $("btnReloadBuildsCalc").addEventListener("click", loadCalcBuilds);
-  $("calcBuild").addEventListener("change", () => {
-    state.selectedBuildId = Number($("calcBuild").value) || null;
-    saveSession();
-    calculate();
-  });
-  $("calcAttack").addEventListener("change", () => {
+  $("calcAttack").addEventListener("change", recalculate);
+  $("calcAttack").addEventListener("input", () => {
     state.weaponAttack = Number($("calcAttack").value) || 0;
-    saveSession();
   });
+  $("btnSaveBuild").addEventListener("click", saveCurrentBuild);
+  $("btnClearMatrix").addEventListener("click", clearMatrix);
 
   $("btnEffectSearch").addEventListener("click", () => {
     const q = $("effectSearch").value.trim();
@@ -423,29 +344,26 @@ function wireEvents() {
   $("effectCategory").addEventListener("change", () => loadEffects());
   $("btnEffectNew").addEventListener("click", () => openEffectDialog(null));
   $("btnEffectCancel").addEventListener("click", () => $("effectDialog").close());
-
   $("effectTable").addEventListener("click", async (event) => {
     const editId = event.target.dataset.edit;
     const delId = event.target.dataset.del;
     if (editId) {
-      const effect = state.effects.find((e) => e.id === Number(editId));
-      openEffectDialog(effect);
+      openEffectDialog(state.effects.find((e) => e.id === Number(editId)));
     }
     if (delId && confirm("削除しますか？")) {
       try {
         await Api.deleteEffect(Number(delId));
+        await refreshMatrixEffects();
         await loadEffects();
       } catch (error) {
         showError(error);
       }
     }
   });
-
   $("effectForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     const id = $("effRowId").value;
     const body = {
-      id: id ? Number(id) : 0,
       effectId: Number($("effEffectId").value),
       name: $("effName").value.trim(),
       category: $("effCategory").value.trim(),
@@ -455,77 +373,14 @@ function wireEvents() {
       description: $("effDescription").value.trim(),
       displayOrder: Number($("effDisplayOrder").value)
     };
-
     try {
-      if (id) {
-        await Api.updateEffect(Number(id), body);
-      } else {
-        await Api.createEffect(body);
-      }
+      if (id) await Api.updateEffect(Number(id), body);
+      else await Api.createEffect(body);
       $("effectDialog").close();
+      await refreshMatrixEffects();
       await loadEffects();
-    } catch (error) {
-      showError(error);
-    }
-  });
-
-  $("btnRelicSearch").addEventListener("click", loadRelics);
-  $("btnRelicReload").addEventListener("click", async () => {
-    $("relicSearch").value = "";
-    $("relicColorFilter").value = "";
-    await loadRelics();
-  });
-  $("btnRelicNew").addEventListener("click", () => openRelicDialog(null));
-  $("btnRelicCancel").addEventListener("click", () => $("relicDialog").close());
-  $("relicTable").addEventListener("click", (event) => {
-    const row = event.target.closest("tr[data-id]");
-    if (!row) return;
-    document.querySelectorAll("#relicTable tr").forEach((tr) => tr.classList.remove("selected"));
-    row.classList.add("selected");
-    openRelicDialog(Number(row.dataset.id));
-  });
-  $("btnRelicDelete").addEventListener("click", async () => {
-    const id = $("relicId").value;
-    if (!id) {
-      alert("削除する遺物を選択してください。");
-      return;
-    }
-    if (!confirm("削除しますか？")) return;
-    try {
-      await Api.deleteRelic(Number(id));
-      clearRelicEditor();
-      $("relicDialog").close();
-      await loadRelics();
-    } catch (error) {
-      showError(error);
-    }
-  });
-  $("relicForm").addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const id = $("relicId").value;
-    const effectIdsBySlot = [1, 2, 3].map((i) => {
-      const value = $(`relicEffect${i}`).value;
-      return value ? Number(value) : null;
-    });
-    const body = {
-      id: id ? Number(id) : null,
-      name: $("relicName").value.trim(),
-      color: Number($("relicColor").value),
-      memo: $("relicMemo").value.trim(),
-      effectIdsBySlot
-    };
-
-    try {
-      if (id) {
-        await Api.updateRelic(Number(id), body);
-      } else {
-        await Api.createRelic(body);
-      }
-      clearRelicEditor();
-      $("relicDialog").close();
-      state.relics = await Api.getRelics();
-      await loadRelics();
-      fillBuildRelicOptions();
+      renderMatrix();
+      await recalculate();
     } catch (error) {
       showError(error);
     }
@@ -536,33 +391,36 @@ function wireEvents() {
     $("buildSearch").value = "";
     loadBuilds();
   });
-  $("btnBuildNew").addEventListener("click", () => openBuildDialog(null));
-  $("btnBuildCancel").addEventListener("click", () => $("buildDialog").close());
-  $("buildTable").addEventListener("click", (event) => {
+  $("buildTable").addEventListener("click", async (event) => {
+    const openId = event.target.dataset.openCalc;
+    if (openId) {
+      try {
+        await loadMatrixFromBuild(Number(openId));
+        showView("calc");
+      } catch (error) {
+        showError(error);
+      }
+      return;
+    }
     const row = event.target.closest("tr[data-id]");
     if (!row) return;
-    document.querySelectorAll("#buildTable tr").forEach((tr) => tr.classList.remove("selected"));
-    row.classList.add("selected");
-    openBuildDialog(Number(row.dataset.id));
+    openBuildMeta(Number(row.dataset.id));
   });
-  $("buildAttack").addEventListener("change", () => {
-    state.weaponAttack = Number($("buildAttack").value) || 0;
-    saveSession();
-  });
-  $("btnBuildToCalc").addEventListener("click", () => {
-    state.weaponAttack = Number($("buildAttack").value) || 0;
-    const id = $("buildId").value;
-    state.selectedBuildId = id ? Number(id) : state.selectedBuildId;
-    saveSession();
+  $("btnBuildCancel").addEventListener("click", () => $("buildDialog").close());
+  $("btnBuildOpenCalc").addEventListener("click", async () => {
+    const id = Number($("buildId").value);
+    if (!id) return;
     $("buildDialog").close();
-    showView("calc");
+    try {
+      await loadMatrixFromBuild(id);
+      showView("calc");
+    } catch (error) {
+      showError(error);
+    }
   });
   $("btnBuildDelete").addEventListener("click", async () => {
     const id = $("buildId").value;
-    if (!id) {
-      alert("削除するビルドを選択してください。");
-      return;
-    }
+    if (!id) return;
     if (!confirm("削除しますか？")) return;
     try {
       await Api.deleteBuild(Number(id));
@@ -570,41 +428,37 @@ function wireEvents() {
         state.selectedBuildId = null;
         saveSession();
       }
-      clearBuildEditor();
       $("buildDialog").close();
       await loadBuilds();
     } catch (error) {
       showError(error);
     }
   });
-  $("buildForm").addEventListener("submit", async (event) => {
+  $("buildMetaForm").addEventListener("submit", async (event) => {
     event.preventDefault();
-    const id = $("buildId").value;
-    const relicIdsByPosition = [1, 2, 3, 4, 5, 6].map((i) => {
-      const value = $(`buildRelic${i}`).value;
-      return value ? Number(value) : null;
-    });
-    const body = {
-      id: id ? Number(id) : null,
-      name: $("buildName").value.trim(),
-      characterName: $("buildCharacter").value.trim(),
-      weaponName: $("buildWeapon").value.trim(),
-      relicIdsByPosition
-    };
-
+    const id = Number($("buildId").value);
     try {
-      state.weaponAttack = Number($("buildAttack").value) || 0;
-      const result = await Api.saveBuild(body);
-      const savedId = result?.build?.id ?? Number(id);
-      state.selectedBuildId = savedId;
-      saveSession();
+      const matrix = await Api.loadBuildMatrix(id);
+      await Api.saveBuildMatrix({
+        id,
+        name: $("buildName").value.trim(),
+        characterName: $("buildCharacter").value.trim(),
+        weaponName: $("buildWeapon").value.trim(),
+        effectIdsByRelic: matrix.effectIdsByRelic
+      });
       $("buildDialog").close();
       await loadBuilds();
-      alert(`保存しました。Id=${savedId}`);
+      alert("保存しました。");
     } catch (error) {
       showError(error);
     }
   });
+}
+
+async function refreshMatrixEffects() {
+  state.matrixEffects = await Api.getEffects({ forRelic: true });
+  state.stagedDefs = await Api.getStagedEffects();
+  state.effects = await Api.getEffects();
 }
 
 async function boot() {
@@ -622,19 +476,24 @@ async function boot() {
   if (status) status.hidden = true;
   if (root) root.hidden = false;
 
-  buildSlotEditors();
   wireEvents();
-  saveSession();
   $("calcAttack").value = state.weaponAttack;
-  $("buildAttack").value = state.weaponAttack;
+  saveSession();
 
   try {
-    state.effects = await Api.getEffects();
-    state.relicEffects = await Api.getEffects({ forRelic: true });
-    state.stagedDefs = await Api.getStagedEffects();
-    state.relics = await Api.getRelics();
-    fillEffectSlotOptions();
-    fillBuildRelicOptions();
+    await refreshMatrixEffects();
+    renderMatrix();
+    if (state.selectedBuildId) {
+      try {
+        await loadMatrixFromBuild(state.selectedBuildId);
+      } catch {
+        state.selectedBuildId = null;
+        saveSession();
+        await recalculate();
+      }
+    } else {
+      await recalculate();
+    }
   } catch (error) {
     showError(error);
   }

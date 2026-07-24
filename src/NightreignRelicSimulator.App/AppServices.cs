@@ -20,6 +20,9 @@ internal static class AppServices
     /// <summary>ビルド Service。</summary>
     public static IBuildService Builds { get; } = new BuildService();
 
+    /// <summary>マトリクス形式のビルド同期。</summary>
+    public static IBuildMatrixService BuildMatrix { get; } = new BuildMatrixService();
+
     /// <summary>火力計算。</summary>
     public static DamageCalculator DamageCalculator { get; } = new DamageCalculator();
 }

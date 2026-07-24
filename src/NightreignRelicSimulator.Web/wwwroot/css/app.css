@@ -326,9 +326,61 @@ pre {
   margin-top: 8px;
 }
 
-.list-hint {
-  margin: 0 0 10px;
-  font-size: 0.85rem;
+.matrix-panel {
+  overflow: hidden;
+}
+
+.matrix-scroll {
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  max-height: min(60vh, 520px);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.matrix-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  min-width: 720px;
+  font-size: 0.88rem;
+}
+
+.matrix-table th,
+.matrix-table td {
+  border-bottom: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  padding: 8px 6px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.matrix-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface-alt);
+  z-index: 2;
+}
+
+.matrix-sticky {
+  position: sticky;
+  left: 0;
+  background: var(--surface);
+  text-align: left !important;
+  min-width: 200px;
+  max-width: 280px;
+  white-space: normal !important;
+  z-index: 1;
+}
+
+.matrix-table thead .matrix-sticky {
+  z-index: 3;
+  background: var(--surface-alt);
+}
+
+.matrix-check input {
+  width: 22px;
+  height: 22px;
+  min-height: 22px;
 }
 
 .check-label {

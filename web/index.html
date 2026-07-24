@@ -18,7 +18,6 @@
       <nav class="nav-buttons">
         <button type="button" class="nav-btn active" data-view="calc">火力計算</button>
         <button type="button" class="nav-btn" data-view="build">ビルド管理</button>
-        <button type="button" class="nav-btn" data-view="relic">遺物管理</button>
         <button type="button" class="nav-btn" data-view="effect">Effect管理</button>
       </nav>
       <div class="nav-footer" id="sessionInfo">火力 —</div>
@@ -32,15 +31,16 @@
       <section id="view-calc" class="view active">
         <div class="toolbar">
           <label>武器表示火力 <input id="calcAttack" type="number" min="0" inputmode="numeric" value="1000" /></label>
-          <label>ビルド
-            <select id="calcBuild"></select>
-          </label>
-          <button type="button" class="btn primary" id="btnCalculate">計算</button>
-          <button type="button" class="btn" id="btnReloadBuildsCalc">再読込</button>
+          <label>ビルド名 <input id="calcBuildName" placeholder="保存時の名前" /></label>
+          <label>キャラ <input id="calcCharacter" /></label>
+          <label>武器 <input id="calcWeapon" /></label>
+          <button type="button" class="btn primary" id="btnSaveBuild">ビルド保存</button>
+          <button type="button" class="btn" id="btnClearMatrix">クリア</button>
         </div>
+        <p class="muted list-hint" id="calcBuildHint">編集中: 新規（チェックすると即計算）</p>
         <div class="panel" id="stagedPanel" hidden>
           <h2>段階効果レベル</h2>
-          <p class="muted">封牢・夜の侵入などは遺物では1効果として扱い、ここでレベルを変更します。</p>
+          <p class="muted">封牢・夜の侵入などは1効果として扱い、ここでレベルを変更します。</p>
           <div id="stagedControls" class="staged-controls"></div>
         </div>
         <div class="summary">
@@ -49,6 +49,22 @@
           <div><span class="muted">最終火力</span><div class="result accent" id="resFinal">-</div></div>
         </div>
         <p class="muted" id="resCount"></p>
+        <div class="panel matrix-panel">
+          <h2>効果 × 遺物マトリクス</h2>
+          <p class="muted">縦=効果 / 横=遺物1〜6 / 1列あたり最大3つ</p>
+          <div class="matrix-scroll">
+            <table class="matrix-table" id="matrixTable">
+              <thead>
+                <tr>
+                  <th class="matrix-sticky">効果</th>
+                  <th>遺物1</th><th>遺物2</th><th>遺物3</th>
+                  <th>遺物4</th><th>遺物5</th><th>遺物6</th>
+                </tr>
+              </thead>
+              <tbody id="matrixBody"></tbody>
+            </table>
+          </div>
+        </div>
         <div class="split">
           <div class="panel">
             <h2>適用された Effect</h2>
@@ -71,37 +87,11 @@
             <input id="buildSearch" placeholder="ビルド名検索" />
             <button type="button" class="btn" id="btnBuildSearch">検索</button>
             <button type="button" class="btn" id="btnBuildReload">再読込</button>
-            <button type="button" class="btn primary" id="btnBuildNew">新規登録</button>
           </div>
-          <p class="muted list-hint">行をタップすると編集できます</p>
+          <p class="muted list-hint">行をタップしてメタ情報を編集。「計算で開く」でマトリクスを復元します</p>
           <table>
-            <thead><tr><th>Id</th><th>名前</th><th>キャラ</th><th>武器</th></tr></thead>
+            <thead><tr><th>Id</th><th>名前</th><th>キャラ</th><th>武器</th><th></th></tr></thead>
             <tbody id="buildTable"></tbody>
-          </table>
-        </div>
-      </section>
-
-      <section id="view-relic" class="view">
-        <div class="panel">
-          <div class="toolbar">
-            <select id="relicColorFilter">
-              <option value="">(すべて)</option>
-              <option value="0">None</option>
-              <option value="1">Red</option>
-              <option value="2">Blue</option>
-              <option value="3">Yellow</option>
-              <option value="4">Green</option>
-              <option value="5">Purple</option>
-            </select>
-            <input id="relicSearch" placeholder="名前検索" />
-            <button type="button" class="btn" id="btnRelicSearch">検索</button>
-            <button type="button" class="btn" id="btnRelicReload">再読込</button>
-            <button type="button" class="btn primary" id="btnRelicNew">新規登録</button>
-          </div>
-          <p class="muted list-hint">行をタップすると編集できます</p>
-          <table>
-            <thead><tr><th>Id</th><th>名前</th><th>色</th></tr></thead>
-            <tbody id="relicTable"></tbody>
           </table>
         </div>
       </section>
@@ -115,7 +105,6 @@
           <button type="button" class="btn primary" id="btnEffectNew">新規登録</button>
         </div>
         <div class="panel">
-          <p class="muted list-hint">「編集」で Popup から変更できます</p>
           <table>
             <thead>
               <tr>
@@ -132,44 +121,17 @@
   <div id="bootStatus" class="boot-status">データベースを準備しています…</div>
 
   <dialog id="buildDialog" class="sheet">
-    <form id="buildForm" class="form">
-      <h2 id="buildEditorTitle">新規登録</h2>
+    <form id="buildMetaForm" class="form">
+      <h2 id="buildEditorTitle">ビルド編集</h2>
       <input type="hidden" id="buildId" />
       <label>ビルド名 <input id="buildName" required /></label>
       <label>キャラ名 <input id="buildCharacter" /></label>
       <label>武器名 <input id="buildWeapon" /></label>
-      <label>武器表示火力 <input id="buildAttack" type="number" min="0" inputmode="numeric" value="1000" /></label>
-      <div id="buildRelicSlots"></div>
       <div class="actions">
-        <button type="submit" class="btn primary">保存</button>
-        <button type="button" class="btn primary" id="btnBuildToCalc">火力計算へ</button>
+        <button type="submit" class="btn primary">メタ情報を保存</button>
+        <button type="button" class="btn primary" id="btnBuildOpenCalc">計算で開く</button>
         <button type="button" class="btn danger" id="btnBuildDelete">削除</button>
         <button type="button" class="btn" id="btnBuildCancel">キャンセル</button>
-      </div>
-    </form>
-  </dialog>
-
-  <dialog id="relicDialog" class="sheet">
-    <form id="relicForm" class="form">
-      <h2 id="relicEditorTitle">新規登録</h2>
-      <input type="hidden" id="relicId" />
-      <label>名前 <input id="relicName" required /></label>
-      <label>色
-        <select id="relicColor">
-          <option value="0">None</option>
-          <option value="1">Red</option>
-          <option value="2">Blue</option>
-          <option value="3">Yellow</option>
-          <option value="4">Green</option>
-          <option value="5">Purple</option>
-        </select>
-      </label>
-      <label>メモ <input id="relicMemo" /></label>
-      <div id="relicEffectSlots"></div>
-      <div class="actions">
-        <button type="submit" class="btn primary">登録/更新</button>
-        <button type="button" class="btn danger" id="btnRelicDelete">削除</button>
-        <button type="button" class="btn" id="btnRelicCancel">キャンセル</button>
       </div>
     </form>
   </dialog>
